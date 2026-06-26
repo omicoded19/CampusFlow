@@ -1,0 +1,348 @@
+import { prisma } from "../src/lib/prisma";
+
+type SeedService = {
+  department: {
+    name: string;
+    slug: string;
+    description: string;
+  };
+  service: {
+    slug: string;
+    title: string;
+    description: string;
+    iconKey: string;
+    tokenPrefix: string;
+    isOpen: boolean;
+    averageServiceMinutes: number;
+  };
+  reasons: string[];
+  counters: Array<{
+    label: string;
+    isActive: boolean;
+  }>;
+};
+
+const seedServices: SeedService[] = [
+  {
+    department: {
+      name: "Academic Office",
+      slug: "academic-office",
+      description:
+        "Handles academic documents, certificates, transcripts, and student records.",
+    },
+    service: {
+      slug: "document-verification",
+      title: "Document Verification",
+      description:
+        "Verify certificates, forms, transcripts, and other academic documents.",
+      iconKey: "file-check",
+      tokenPrefix: "DOC",
+      isOpen: true,
+      averageServiceMinutes: 9,
+    },
+    reasons: [
+      "Bonafide certificate verification",
+      "Transcript verification",
+      "Scholarship document verification",
+      "Internship document verification",
+      "Other academic document",
+    ],
+    counters: [
+      {
+        label: "Counter 1",
+        isActive: true,
+      },
+      {
+        label: "Counter 2",
+        isActive: true,
+      },
+    ],
+  },
+  {
+    department: {
+      name: "Health Centre",
+      slug: "health-centre",
+      description:
+        "Provides general consultations and basic healthcare support for students.",
+    },
+    service: {
+      slug: "general-consultation",
+      title: "General Consultation",
+      description:
+        "Join the queue for a general health consultation with campus doctors.",
+      iconKey: "stethoscope",
+      tokenPrefix: "MED",
+      isOpen: true,
+      averageServiceMinutes: 8,
+    },
+    reasons: [
+      "General consultation",
+      "Follow-up consultation",
+      "Prescription renewal",
+      "Medical certificate",
+      "Minor illness",
+    ],
+    counters: [
+      {
+        label: "Doctor Room 1",
+        isActive: true,
+      },
+      {
+        label: "Doctor Room 2",
+        isActive: true,
+      },
+      {
+        label: "Doctor Room 3",
+        isActive: true,
+      },
+    ],
+  },
+  {
+    department: {
+      name: "Central Library",
+      slug: "central-library",
+      description:
+        "Manages issued books, library accounts, pending dues, and clearances.",
+    },
+    service: {
+      slug: "library-clearance",
+      title: "Library Clearance",
+      description:
+        "Submit books, verify pending dues, and complete library clearance.",
+      iconKey: "library",
+      tokenPrefix: "LIB",
+      isOpen: true,
+      averageServiceMinutes: 8,
+    },
+    reasons: [
+      "Return issued books",
+      "Clear pending dues",
+      "Semester clearance",
+      "Graduation clearance",
+      "Library account issue",
+    ],
+    counters: [
+      {
+        label: "Library Desk 1",
+        isActive: true,
+      },
+    ],
+  },
+  {
+    department: {
+      name: "Accounts Office",
+      slug: "accounts-office",
+      description:
+        "Handles student fees, receipts, refunds, and scholarship enquiries.",
+    },
+    service: {
+      slug: "fee-enquiries",
+      title: "Fee Enquiries",
+      description:
+        "Resolve payment, scholarship, receipt, and fee-related queries.",
+      iconKey: "credit-card",
+      tokenPrefix: "ACC",
+      isOpen: false,
+      averageServiceMinutes: 10,
+    },
+    reasons: [
+      "Fee payment issue",
+      "Receipt request",
+      "Scholarship status",
+      "Refund enquiry",
+      "Fee structure clarification",
+    ],
+    counters: [
+      {
+        label: "Accounts Counter 1",
+        isActive: false,
+      },
+      {
+        label: "Accounts Counter 2",
+        isActive: false,
+      },
+    ],
+  },
+  {
+    department: {
+      name: "Hostel Office",
+      slug: "hostel-office",
+      description:
+        "Manages hostel rooms, maintenance requests, leave, and documentation.",
+    },
+    service: {
+      slug: "hostel-services",
+      title: "Hostel Services",
+      description:
+        "Handle room allocation, maintenance, leave, and hostel documentation.",
+      iconKey: "building",
+      tokenPrefix: "HST",
+      isOpen: true,
+      averageServiceMinutes: 6,
+    },
+    reasons: [
+      "Room allocation",
+      "Maintenance complaint",
+      "Hostel leave request",
+      "Room change request",
+      "Hostel document verification",
+    ],
+    counters: [
+      {
+        label: "Hostel Desk 1",
+        isActive: true,
+      },
+      {
+        label: "Hostel Desk 2",
+        isActive: true,
+      },
+    ],
+  },
+  {
+    department: {
+      name: "Student Affairs",
+      slug: "student-affairs",
+      description:
+        "Supports student identity cards, records, and general student services.",
+    },
+    service: {
+      slug: "id-card-support",
+      title: "ID Card Support",
+      description:
+        "Request a replacement card or resolve student ID-related issues.",
+      iconKey: "badge-check",
+      tokenPrefix: "ID",
+      isOpen: true,
+      averageServiceMinutes: 15,
+    },
+    reasons: [
+      "Lost ID card",
+      "Damaged ID card",
+      "Incorrect student information",
+      "New ID card request",
+      "ID card activation issue",
+    ],
+    counters: [
+      {
+        label: "Student Affairs Desk 1",
+        isActive: true,
+      },
+    ],
+  },
+];
+
+async function seedDatabase() {
+  console.log("Starting CampusFlow database seed...");
+
+  for (const seedItem of seedServices) {
+    const department = await prisma.department.upsert({
+      where: {
+        slug: seedItem.department.slug,
+      },
+      update: {
+        name: seedItem.department.name,
+        description: seedItem.department.description,
+      },
+      create: {
+        name: seedItem.department.name,
+        slug: seedItem.department.slug,
+        description: seedItem.department.description,
+      },
+    });
+
+    const service = await prisma.service.upsert({
+      where: {
+        slug: seedItem.service.slug,
+      },
+      update: {
+        title: seedItem.service.title,
+        description: seedItem.service.description,
+        iconKey: seedItem.service.iconKey,
+        tokenPrefix: seedItem.service.tokenPrefix,
+        isOpen: seedItem.service.isOpen,
+        averageServiceMinutes:
+          seedItem.service.averageServiceMinutes,
+        departmentId: department.id,
+      },
+      create: {
+        slug: seedItem.service.slug,
+        title: seedItem.service.title,
+        description: seedItem.service.description,
+        iconKey: seedItem.service.iconKey,
+        tokenPrefix: seedItem.service.tokenPrefix,
+        isOpen: seedItem.service.isOpen,
+        averageServiceMinutes:
+          seedItem.service.averageServiceMinutes,
+        departmentId: department.id,
+      },
+    });
+
+    for (const [index, reason] of seedItem.reasons.entries()) {
+      await prisma.serviceReason.upsert({
+        where: {
+          serviceId_label: {
+            serviceId: service.id,
+            label: reason,
+          },
+        },
+        update: {
+          position: index + 1,
+        },
+        create: {
+          serviceId: service.id,
+          label: reason,
+          position: index + 1,
+        },
+      });
+    }
+
+    for (const counter of seedItem.counters) {
+      await prisma.counter.upsert({
+        where: {
+          serviceId_label: {
+            serviceId: service.id,
+            label: counter.label,
+          },
+        },
+        update: {
+          isActive: counter.isActive,
+        },
+        create: {
+          serviceId: service.id,
+          label: counter.label,
+          isActive: counter.isActive,
+        },
+      });
+    }
+
+    console.log(`Seeded: ${seedItem.service.title}`);
+  }
+
+  const departmentCount = await prisma.department.count();
+  const serviceCount = await prisma.service.count();
+  const reasonCount = await prisma.serviceReason.count();
+  const counterCount = await prisma.counter.count();
+
+  console.log("");
+  console.log("CampusFlow database seed completed.");
+  console.log(`Departments: ${departmentCount}`);
+  console.log(`Services: ${serviceCount}`);
+  console.log(`Service reasons: ${reasonCount}`);
+  console.log(`Counters: ${counterCount}`);
+}
+
+seedDatabase()
+  .catch((error: unknown) => {
+    console.error("Database seed failed:");
+
+    if (error instanceof Error) {
+      console.error(error.message);
+    } else {
+      console.error(error);
+    }
+
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

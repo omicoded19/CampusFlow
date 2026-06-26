@@ -1,0 +1,144 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  STUDENT
+  STAFF
+  ADMIN
+}
+
+enum QueueStatus {
+  WAITING
+  CALLED
+  SERVING
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  fullName     String
+  email        String   @unique
+  studentId    String?  @unique
+  passwordHash String
+  role         UserRole @default(STUDENT)
+
+  queueEntries     QueueEntry[]
+  assignedCounters Counter[]    @relation("CounterStaff")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+model Department {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+
+  services Service[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Service {
+  id                    String  @id @default(uuid())
+  slug                  String  @unique
+  title                 String
+  description           String
+  iconKey               String  @default("circle-help")
+  tokenPrefix           String  @default("A")
+  isOpen                Boolean @default(true)
+  averageServiceMinutes Int     @default(10)
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  reasons      ServiceReason[]
+  counters     Counter[]
+  queueEntries QueueEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([isOpen])
+}
+
+model ServiceReason {
+  id       String @id @default(uuid())
+  label    String
+  position Int    @default(0)
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([serviceId, label])
+  @@index([serviceId, position])
+}
+
+model Counter {
+  id       String  @id @default(uuid())
+  label    String
+  isActive Boolean @default(true)
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  staffId String?
+  staff   User?   @relation("CounterStaff", fields: [staffId], references: [id], onDelete: SetNull)
+
+  queueEntries QueueEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([serviceId, label])
+  @@index([serviceId, isActive])
+  @@index([staffId])
+}
+
+model QueueEntry {
+  id          String      @id @default(uuid())
+  tokenNumber Int
+  tokenLabel  String
+  queueDate   DateTime    @db.Date
+  reason      String
+  note        String?
+  status      QueueStatus @default(WAITING)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  counterId String?
+  counter   Counter? @relation(fields: [counterId], references: [id], onDelete: SetNull)
+
+  joinedAt    DateTime  @default(now())
+  calledAt    DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([serviceId, queueDate, tokenNumber])
+  @@index([serviceId, status, joinedAt])
+  @@index([userId, status])
+  @@index([counterId, status])
+}
