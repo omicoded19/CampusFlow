@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+
 import { prisma } from "../src/lib/prisma";
 
 type SeedService = {
@@ -316,6 +318,76 @@ async function seedDatabase() {
     }
 
     console.log(`Seeded: ${seedItem.service.title}`);
+  }
+
+  const demoStaffEmail =
+    process.env.DEMO_STAFF_EMAIL
+      ?.trim()
+      .toLowerCase();
+  const demoStaffPassword =
+    process.env.DEMO_STAFF_PASSWORD;
+
+  if (demoStaffEmail && demoStaffPassword) {
+    if (demoStaffPassword.length < 8) {
+      throw new Error(
+        "DEMO_STAFF_PASSWORD must contain at least 8 characters.",
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(
+      demoStaffPassword,
+      12,
+    );
+
+    const staffUser = await prisma.user.upsert({
+      where: {
+        email: demoStaffEmail,
+      },
+      update: {
+        fullName: "Campus Service Staff",
+        passwordHash,
+        role: "STAFF",
+        studentId: null,
+      },
+      create: {
+        fullName: "Campus Service Staff",
+        email: demoStaffEmail,
+        passwordHash,
+        role: "STAFF",
+      },
+    });
+
+    const firstActiveCounter =
+      await prisma.counter.findFirst({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (firstActiveCounter) {
+      await prisma.counter.update({
+        where: {
+          id: firstActiveCounter.id,
+        },
+        data: {
+          staffId: staffUser.id,
+        },
+      });
+    }
+
+    console.log(
+      `Seeded demo staff account: ${demoStaffEmail}`,
+    );
+  } else {
+    console.log(
+      "Skipped demo staff account (set DEMO_STAFF_EMAIL and DEMO_STAFF_PASSWORD to create one).",
+    );
   }
 
   const departmentCount = await prisma.department.count();

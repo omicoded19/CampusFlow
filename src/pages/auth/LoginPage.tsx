@@ -103,12 +103,7 @@ function LoginPage() {
         return;
       }
 
-      /*
-       * Staff dashboard hum next phase mein
-       * create karenge. Filhaal authenticated
-       * staff ko dashboard route par bhej rahe hain.
-       */
-      navigate("/dashboard", {
+      navigate("/staff", {
         replace: true,
       });
     } catch (requestError) {

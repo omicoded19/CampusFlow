@@ -93,12 +93,12 @@ function App() {
                   Explore Services
                 </a>
 
-                <button
-                  type="button"
-                  className="rounded-xl border border-gray-300 bg-white px-6 py-3 font-semibold text-gray-700 transition hover:bg-gray-50"
+                <a
+                  href="#how-it-works"
+                  className="rounded-xl border border-gray-300 bg-white px-6 py-3 text-center font-semibold text-gray-700 transition hover:bg-gray-50"
                 >
                   How it works
-                </button>
+                </a>
               </div>
 
               <div className="mt-10 flex flex-wrap gap-8">
@@ -129,7 +129,7 @@ function App() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-semibold text-violet-600">
-                    Your active queue
+                    Live queue preview
                   </p>
 
                   <h2 className="mt-1 text-2xl font-bold text-gray-900">
@@ -299,6 +299,81 @@ function App() {
                 ))}
               </div>
             )}
+          </div>
+        </section>
+
+        <section
+          id="how-it-works"
+          className="border-t border-gray-200 bg-[#f6f7fb] px-6 py-16"
+        >
+          <div className="mx-auto max-w-7xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-600">
+              How it works
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+              Three steps to avoid the line
+            </h2>
+
+            <div className="mt-10 grid gap-6 md:grid-cols-3">
+              {[
+                {
+                  number: "01",
+                  title: "Choose a service",
+                  description:
+                    "Compare live queue lengths, active counters, and estimated waiting times.",
+                },
+                {
+                  number: "02",
+                  title: "Join remotely",
+                  description:
+                    "Select your visit reason and receive a persistent campus service token.",
+                },
+                {
+                  number: "03",
+                  title: "Track your turn",
+                  description:
+                    "Monitor the number of students ahead and proceed when your token is called.",
+                },
+              ].map((step) => (
+                <article
+                  key={step.number}
+                  className="rounded-2xl border border-gray-200 bg-white p-6"
+                >
+                  <p className="text-sm font-bold text-violet-600">
+                    {step.number}
+                  </p>
+                  <h3 className="mt-4 text-xl font-bold text-gray-900">
+                    {step.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-gray-600">
+                    {step.description}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section
+          id="help"
+          className="border-t border-gray-200 bg-white px-6 py-16"
+        >
+          <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 rounded-3xl bg-violet-600 p-8 text-white sm:p-10 md:flex-row md:items-center">
+            <div>
+              <p className="text-sm font-semibold text-violet-100">
+                Ready to use CampusFlow?
+              </p>
+              <h2 className="mt-2 text-3xl font-bold">
+                Create a student account and join your first queue.
+              </h2>
+            </div>
+
+            <a
+              href="/register"
+              className="shrink-0 rounded-xl bg-white px-6 py-3 text-center font-bold text-violet-700 transition hover:bg-violet-50"
+            >
+              Create student account
+            </a>
           </div>
         </section>
       </main>

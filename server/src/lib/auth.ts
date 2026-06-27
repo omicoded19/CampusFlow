@@ -112,7 +112,10 @@ export function setAuthCookie(
   response.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite:
+      process.env.NODE_ENV === "production"
+        ? "none"
+        : "lax",
     maxAge: AUTH_COOKIE_MAX_AGE_MS,
     path: "/",
   });
@@ -124,7 +127,10 @@ export function clearAuthCookie(
   response.clearCookie(AUTH_COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite:
+      process.env.NODE_ENV === "production"
+        ? "none"
+        : "lax",
     path: "/",
   });
 }

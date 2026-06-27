@@ -35,7 +35,7 @@ const sidebarItems: SidebarItem[] = [
   },
   {
     label: "Campus Services",
-    path: "/#services",
+    path: "/services",
     icon: UsersRound,
   },
   {
@@ -108,7 +108,11 @@ function StudentSidebar({
       <nav className="mt-10 space-y-2">
         {sidebarItems.map((item) => {
           const isActive =
-            location.pathname === item.path;
+            item.path === "/dashboard"
+              ? location.pathname === item.path
+              : location.pathname.startsWith(
+                  item.path,
+                );
 
           return (
             <Link

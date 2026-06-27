@@ -1,75 +1,88 @@
-# React + TypeScript + Vite
+# CampusFlow
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+CampusFlow is a full-stack campus queue-management platform. Students can create an account, browse live campus services, join one queue remotely, track their token and position, cancel a queue entry, and review queue history. Staff users can operate active queues by calling, serving, completing, or skipping tokens.
 
-Currently, two official plugins are available:
+## Core features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Student registration and login with secure HTTP-only cookie sessions
+- Role-based student and staff routes
+- Live service availability, active-counter counts, queue length, and estimated waiting time
+- Persistent queue tokens stored in PostgreSQL
+- One-active-queue-per-student enforcement
+- Student dashboard, service directory, queue details, history, notifications, profile, and settings
+- Staff operations dashboard with controlled queue-status transitions
+- Responsive React interface with loading, empty, and error states
 
-## React Compiler
+## Tech stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Frontend: React, TypeScript, Vite, Tailwind CSS, React Router, Lucide React
+- Backend: Node.js, Express.js, TypeScript
+- Database: PostgreSQL, Prisma ORM
+- Authentication: JWT, bcrypt, HTTP-only cookies
 
-## Expanding the ESLint configuration
+## Local setup
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 1. Install dependencies
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+cd server
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Configure environment files
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Create `.env` in the project root:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+VITE_API_URL=http://localhost:4000
+```
 
+Create `server/.env` from `server/.env.example` and provide a PostgreSQL connection string and a JWT secret of at least 32 characters.
+
+### 3. Prepare the database
+
+```bash
+cd server
+npx prisma migrate deploy
+npx prisma generate
+npm run db:seed
+```
+
+The optional `DEMO_STAFF_EMAIL` and `DEMO_STAFF_PASSWORD` values create a local staff login during seeding.
+
+### 4. Run CampusFlow
+
+Backend terminal:
+
+```bash
+cd server
+npm run dev
+```
+
+Frontend terminal:
+
+```bash
+npm run dev
+```
+
+## Verification
+
+```bash
+npm run lint
+npm run build
+cd server
+npm run build
+```
+
+## Main application flow
+
+```text
+Student registration/login
+→ Campus service directory
+→ Service details
+→ Join queue
+→ Persistent token and live position
+→ Staff calls/serves/completes token
+→ Student queue history
 ```

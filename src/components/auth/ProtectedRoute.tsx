@@ -15,6 +15,7 @@ import type {
 type ProtectedRouteProps = {
   children: (user: AuthUser) => ReactNode;
   allowedRoles?: AuthUserRole[];
+  loginPath?: string;
 };
 
 type AuthCheckStatus =
@@ -25,10 +26,10 @@ type AuthCheckStatus =
 function ProtectedRoute({
   children,
   allowedRoles,
+  loginPath = "/login?role=student",
 }: ProtectedRouteProps) {
   const [status, setStatus] =
     useState<AuthCheckStatus>("checking");
-
   const [user, setUser] =
     useState<AuthUser | null>(null);
 
@@ -40,7 +41,6 @@ function ProtectedRoute({
         const currentUser = await getCurrentUser(
           controller.signal,
         );
-
         setUser(currentUser);
         setStatus("authenticated");
       } catch (error) {
@@ -58,9 +58,7 @@ function ProtectedRoute({
 
     void checkAuthentication();
 
-    return () => {
-      controller.abort();
-    };
+    return () => controller.abort();
   }, []);
 
   if (status === "checking") {
@@ -68,11 +66,9 @@ function ProtectedRoute({
       <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-6">
         <div className="text-center">
           <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-violet-600" />
-
           <p className="mt-4 font-semibold text-gray-900">
             Checking your session...
           </p>
-
           <p className="mt-1 text-sm text-gray-500">
             Please wait while CampusFlow verifies
             your account.
@@ -82,16 +78,8 @@ function ProtectedRoute({
     );
   }
 
-  if (
-    status === "unauthenticated" ||
-    !user
-  ) {
-    return (
-      <Navigate
-        to="/login?role=student"
-        replace
-      />
-    );
+  if (status === "unauthenticated" || !user) {
+    return <Navigate to={loginPath} replace />;
   }
 
   if (
@@ -100,7 +88,11 @@ function ProtectedRoute({
   ) {
     return (
       <Navigate
-        to="/login"
+        to={
+          user.role === "STUDENT"
+            ? "/dashboard"
+            : "/staff"
+        }
         replace
       />
     );
