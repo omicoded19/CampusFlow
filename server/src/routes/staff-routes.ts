@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import {
   Router,
   type Request,
@@ -5,7 +6,10 @@ import {
 } from "express";
 
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../middleware/require-auth";
+import {
+  requireAuth,
+  type AuthenticatedRequest,
+} from "../middleware/require-auth";
 
 const staffRouter = Router();
 
@@ -41,6 +45,38 @@ function isStaffActionStatus(
   );
 }
 
+
+async function getAccessibleServiceIds(
+  request: Request,
+): Promise<string[] | null> {
+  const { userId, role } =
+    (request as AuthenticatedRequest).auth;
+
+  if (role === "ADMIN") {
+    return null;
+  }
+
+  const counters = await prisma.counter.findMany({
+    where: {
+      staffId: userId,
+      isActive: true,
+    },
+    select: {
+      serviceId: true,
+    },
+  });
+
+  return [...new Set(counters.map((counter) => counter.serviceId))];
+}
+
+function readRequiredString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 function sendStaffError(
   response: Response,
   error: unknown,
@@ -61,11 +97,24 @@ staffRouter.use(requireAuth(["STAFF", "ADMIN"]));
 
 staffRouter.get(
   "/dashboard",
-  async (_request: Request, response: Response) => {
+  async (request: Request, response: Response) => {
     try {
+      const { userId } =
+        (request as AuthenticatedRequest).auth;
+      const accessibleServiceIds =
+        await getAccessibleServiceIds(request);
+
       const [services, queueEntries] =
         await Promise.all([
           prisma.service.findMany({
+            where:
+              accessibleServiceIds === null
+                ? undefined
+                : {
+                    id: {
+                      in: accessibleServiceIds,
+                    },
+                  },
             orderBy: {
               title: "asc",
             },
@@ -83,6 +132,12 @@ staffRouter.get(
                   id: true,
                   label: true,
                   isActive: true,
+                  staff: {
+                    select: {
+                      isActive: true,
+                      role: true,
+                    },
+                  },
                 },
               },
               _count: {
@@ -99,11 +154,33 @@ staffRouter.get(
             },
           }),
           prisma.queueEntry.findMany({
-            where: {
-              status: {
-                in: [...activeStatuses],
-              },
-            },
+            where:
+              accessibleServiceIds === null
+                ? {
+                    status: {
+                      in: [...activeStatuses],
+                    },
+                  }
+                : {
+                    OR: [
+                      {
+                        serviceId: {
+                          in: accessibleServiceIds,
+                        },
+                        status: "WAITING",
+                      },
+                      {
+                        status: {
+                          in: ["CALLED", "SERVING"],
+                        },
+                        counter: {
+                          is: {
+                            staffId: userId,
+                          },
+                        },
+                      },
+                    ],
+                  },
             orderBy: [
               {
                 service: {
@@ -156,7 +233,10 @@ staffRouter.get(
             department: service.department.name,
             isOpen: service.isOpen,
             activeCounters: service.counters.filter(
-              (counter) => counter.isActive,
+              (counter) =>
+                counter.isActive &&
+                counter.staff?.isActive &&
+                counter.staff.role === "STAFF",
             ).length,
             activeQueueCount:
               service._count.queueEntries,
@@ -192,8 +272,10 @@ staffRouter.get(
 
 staffRouter.get(
   "/analytics",
-  async (_request: Request, response: Response) => {
+  async (request: Request, response: Response) => {
     try {
+      const accessibleServiceIds =
+        await getAccessibleServiceIds(request);
       const now = new Date();
       const startOfToday = new Date(now);
       startOfToday.setHours(0, 0, 0, 0);
@@ -204,18 +286,37 @@ staffRouter.get(
       const [services, weekEntries, recentEntries] =
         await Promise.all([
           prisma.service.findMany({
+            where:
+              accessibleServiceIds === null
+                ? undefined
+                : { id: { in: accessibleServiceIds } },
             orderBy: { title: "asc" },
             select: {
               slug: true,
               title: true,
               counters: {
-                select: { isActive: true },
+                select: {
+                  isActive: true,
+                  staff: {
+                    select: {
+                      isActive: true,
+                      role: true,
+                    },
+                  },
+                },
               },
             },
           }),
           prisma.queueEntry.findMany({
             where: {
               joinedAt: { gte: startOfWeek },
+              ...(accessibleServiceIds === null
+                ? {}
+                : {
+                    serviceId: {
+                      in: accessibleServiceIds,
+                    },
+                  }),
             },
             orderBy: { joinedAt: "asc" },
             select: {
@@ -240,6 +341,14 @@ staffRouter.get(
             },
           }),
           prisma.queueEntry.findMany({
+            where:
+              accessibleServiceIds === null
+                ? undefined
+                : {
+                    serviceId: {
+                      in: accessibleServiceIds,
+                    },
+                  },
             orderBy: { updatedAt: "desc" },
             take: 14,
             select: {
@@ -397,7 +506,13 @@ staffRouter.get(
       );
       const activeCounters = services.reduce(
         (sum, service) =>
-          sum + service.counters.filter((counter) => counter.isActive).length,
+          sum +
+          service.counters.filter(
+            (counter) =>
+              counter.isActive &&
+              counter.staff?.isActive &&
+              counter.staff.role === "STAFF",
+          ).length,
         0,
       );
       const completedOrSkipped = completedToday.length + skippedToday.length;
@@ -443,6 +558,8 @@ staffRouter.patch(
   "/queues/:queueId/status",
   async (request: Request, response: Response) => {
     try {
+      const { userId, role } =
+        (request as AuthenticatedRequest).auth;
       const rawQueueId = request.params.queueId;
       const queueId = Array.isArray(rawQueueId)
         ? rawQueueId[0]
@@ -473,6 +590,11 @@ staffRouter.patch(
             id: true,
             status: true,
             serviceId: true,
+            counter: {
+              select: {
+                staffId: true,
+              },
+            },
           },
         });
 
@@ -527,49 +649,138 @@ staffRouter.patch(
         return;
       }
 
-      const firstActiveCounter =
-        status === "CALLED"
-          ? await prisma.counter.findFirst({
-              where: {
-                serviceId: existingEntry.serviceId,
-                isActive: true,
+      let actionCounterId: string | null = null;
+
+      if (role === "STAFF") {
+        if (
+          currentStatus !== "WAITING" &&
+          existingEntry.counter?.staffId !== userId
+        ) {
+          response.status(403).json({
+            success: false,
+            error: {
+              code: "COUNTER_NOT_ASSIGNED",
+              message:
+                "This token is being handled by another staff counter.",
+            },
+          });
+
+          return;
+        }
+
+        const assignedCounter =
+          await prisma.counter.findFirst({
+            where: {
+              serviceId: existingEntry.serviceId,
+              staffId: userId,
+              isActive: true,
+              staff: {
+                is: {
+                  isActive: true,
+                  role: "STAFF",
+                },
               },
-              orderBy: {
-                label: "asc",
+            },
+            orderBy: {
+              label: "asc",
+            },
+            select: {
+              id: true,
+            },
+          });
+
+        if (!assignedCounter) {
+          response.status(403).json({
+            success: false,
+            error: {
+              code: "NO_ACTIVE_COUNTER_ASSIGNMENT",
+              message:
+                "You need an active counter assignment for this service before handling its queue.",
+            },
+          });
+
+          return;
+        }
+
+        actionCounterId = assignedCounter.id;
+      } else if (status === "CALLED") {
+        const availableCounter =
+          await prisma.counter.findFirst({
+            where: {
+              serviceId: existingEntry.serviceId,
+              isActive: true,
+              staff: {
+                is: {
+                  isActive: true,
+                  role: "STAFF",
+                },
               },
-              select: {
-                id: true,
-              },
-            })
-          : null;
+            },
+            orderBy: {
+              label: "asc",
+            },
+            select: {
+              id: true,
+            },
+          });
+
+        if (!availableCounter) {
+          response.status(409).json({
+            success: false,
+            error: {
+              code: "NO_OPERATIONAL_COUNTER",
+              message:
+                "Assign an active staff member to an active counter before calling this token.",
+            },
+          });
+
+          return;
+        }
+
+        actionCounterId = availableCounter.id;
+      }
 
       const timestamp = new Date();
 
-      await prisma.queueEntry.update({
-        where: {
-          id: queueId,
-        },
-        data: {
-          status,
-          ...(status === "CALLED"
-            ? {
-                calledAt: timestamp,
-                counterId:
-                  firstActiveCounter?.id ?? null,
-              }
-            : {}),
-          ...(status === "SERVING"
-            ? {
-                startedAt: timestamp,
-              }
-            : {}),
-          ...(status === "COMPLETED"
-            ? {
-                completedAt: timestamp,
-              }
-            : {}),
-        },
-      });
+      const updateResult =
+        await prisma.queueEntry.updateMany({
+          where: {
+            id: queueId,
+            status: currentStatus,
+          },
+          data: {
+            status,
+            ...(status === "CALLED"
+              ? {
+                  calledAt: timestamp,
+                  counterId: actionCounterId,
+                }
+              : {}),
+            ...(status === "SERVING"
+              ? {
+                  startedAt: timestamp,
+                }
+              : {}),
+            ...(status === "COMPLETED"
+              ? {
+                  completedAt: timestamp,
+                }
+              : {}),
+          },
+        });
+
+      if (updateResult.count === 0) {
+        response.status(409).json({
+          success: false,
+          error: {
+            code: "QUEUE_STATUS_CHANGED",
+            message:
+              "Another staff member updated this token. Refresh the queue and try again.",
+          },
+        });
+
+        return;
+      }
 
       response.status(200).json({
         success: true,
@@ -586,6 +797,8 @@ staffRouter.patch(
   "/queues/:queueId/transfer",
   async (request: Request, response: Response) => {
     try {
+      const { userId, role } =
+        (request as AuthenticatedRequest).auth;
       const rawQueueId = request.params.queueId;
       const queueId = Array.isArray(rawQueueId) ? rawQueueId[0] : rawQueueId;
       const body = (request.body ?? {}) as RequestBody;
@@ -602,11 +815,40 @@ staffRouter.patch(
       const [entry, destination] = await Promise.all([
         prisma.queueEntry.findUnique({
           where: { id: queueId },
-          select: { id: true, status: true, serviceId: true, queueDate: true },
+          select: {
+            id: true,
+            status: true,
+            serviceId: true,
+            queueDate: true,
+            counter: {
+              select: {
+                staffId: true,
+              },
+            },
+          },
         }),
         prisma.service.findUnique({
           where: { slug: serviceSlug },
-          select: { id: true, title: true, tokenPrefix: true, isOpen: true },
+          select: {
+            id: true,
+            title: true,
+            tokenPrefix: true,
+            isOpen: true,
+            counters: {
+              where: {
+                isActive: true,
+                staff: {
+                  is: {
+                    isActive: true,
+                    role: "STAFF",
+                  },
+                },
+              },
+              select: {
+                id: true,
+              },
+            },
+          },
         }),
       ]);
 
@@ -618,10 +860,46 @@ staffRouter.patch(
         return;
       }
 
-      if (!destination || !destination.isOpen) {
+      if (role === "STAFF") {
+        const hasSourceAccess =
+          entry.status === "WAITING"
+            ? await prisma.counter.findFirst({
+                where: {
+                  serviceId: entry.serviceId,
+                  staffId: userId,
+                  isActive: true,
+                },
+                select: { id: true },
+              })
+            : entry.counter?.staffId === userId
+              ? { id: "assigned" }
+              : null;
+
+        if (!hasSourceAccess) {
+          response.status(403).json({
+            success: false,
+            error: {
+              code: "TRANSFER_NOT_ALLOWED",
+              message:
+                "You can only transfer tokens from your assigned service or counter.",
+            },
+          });
+          return;
+        }
+      }
+
+      if (
+        !destination ||
+        !destination.isOpen ||
+        destination.counters.length === 0
+      ) {
         response.status(409).json({
           success: false,
-          error: { code: "DESTINATION_UNAVAILABLE", message: "The destination service is currently unavailable." },
+          error: {
+            code: "DESTINATION_UNAVAILABLE",
+            message:
+              "The destination service needs an active counter with an assigned staff member.",
+          },
         });
         return;
       }
@@ -706,7 +984,14 @@ staffRouter.get(
                 id: true,
                 label: true,
                 isActive: true,
-                staff: { select: { id: true, fullName: true, email: true } },
+                staff: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                    isActive: true,
+                  },
+                },
               },
             },
             _count: {
@@ -724,8 +1009,24 @@ staffRouter.get(
             fullName: true,
             email: true,
             role: true,
+            isActive: true,
             createdAt: true,
-            _count: { select: { assignedCounters: true } },
+            assignedCounters: {
+              orderBy: {
+                label: "asc",
+              },
+              select: {
+                id: true,
+                label: true,
+                isActive: true,
+                service: {
+                  select: {
+                    slug: true,
+                    title: true,
+                  },
+                },
+              },
+            },
           },
         }),
       ]);
@@ -750,7 +1051,11 @@ staffRouter.get(
             description: service.description,
             department: service.department.name,
             isOpen: service.isOpen,
-            activeCounters: service.counters.filter((counter) => counter.isActive).length,
+            activeCounters: service.counters.filter(
+              (counter) =>
+                counter.isActive &&
+                counter.staff?.isActive,
+            ).length,
             activeQueueCount: service._count.queueEntries,
             averageServiceMinutes: service.averageServiceMinutes,
             counters: service.counters,
@@ -760,7 +1065,16 @@ staffRouter.get(
             fullName: member.fullName,
             email: member.email,
             role: member.role,
-            assignedCounters: member._count.assignedCounters,
+            isActive: member.isActive,
+            assignedCounters: member.assignedCounters.map((counter) => ({
+              id: counter.id,
+              label: counter.label,
+              isActive: counter.isActive,
+              service: {
+                id: counter.service.slug,
+                title: counter.service.title,
+              },
+            })),
             createdAt: member.createdAt,
           })),
         },
@@ -811,6 +1125,302 @@ staffRouter.patch(
       }
       await prisma.counter.update({ where: { id: counterId }, data: { isActive: body.isActive } });
       response.status(200).json({ success: true, message: "Counter availability updated." });
+    } catch (error) {
+      sendStaffError(response, error);
+    }
+  },
+);
+
+
+staffRouter.post(
+  "/staff-members",
+  requireAuth(["ADMIN"]),
+  async (request: Request, response: Response) => {
+    try {
+      const body = (request.body ?? {}) as RequestBody;
+      const fullName = readRequiredString(body.fullName);
+      const email = readRequiredString(body.email).toLowerCase();
+      const password =
+        typeof body.password === "string" ? body.password : "";
+      const counterIds = Array.isArray(body.counterIds)
+        ? [...new Set(
+            body.counterIds.filter(
+              (value): value is string =>
+                typeof value === "string" && value.trim().length > 0,
+            ),
+          )]
+        : [];
+
+      if (!fullName || !email || !password) {
+        response.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_STAFF_DETAILS",
+            message:
+              "Full name, email, and a temporary password are required.",
+          },
+        });
+        return;
+      }
+
+      if (fullName.length < 2 || fullName.length > 80) {
+        response.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_STAFF_NAME",
+            message:
+              "Staff name must contain between 2 and 80 characters.",
+          },
+        });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        response.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_STAFF_EMAIL",
+            message: "Enter a valid staff email address.",
+          },
+        });
+        return;
+      }
+
+      if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+        response.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_STAFF_PASSWORD",
+            message:
+              "The temporary password must contain 8 to 72 bytes.",
+          },
+        });
+        return;
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+
+      if (existingUser) {
+        response.status(409).json({
+          success: false,
+          error: {
+            code: "STAFF_EMAIL_EXISTS",
+            message:
+              "An account with this email address already exists.",
+          },
+        });
+        return;
+      }
+
+      if (counterIds.length > 0) {
+        const counterCount = await prisma.counter.count({
+          where: {
+            id: {
+              in: counterIds,
+            },
+          },
+        });
+
+        if (counterCount !== counterIds.length) {
+          response.status(400).json({
+            success: false,
+            error: {
+              code: "INVALID_COUNTER_SELECTION",
+              message:
+                "One or more selected counters no longer exist.",
+            },
+          });
+          return;
+        }
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const staffMember = await prisma.$transaction(
+        async (transaction) => {
+          const member = await transaction.user.create({
+            data: {
+              fullName,
+              email,
+              passwordHash,
+              role: "STAFF",
+              studentId: null,
+              isActive: true,
+            },
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          });
+
+          if (counterIds.length > 0) {
+            await transaction.counter.updateMany({
+              where: {
+                id: {
+                  in: counterIds,
+                },
+              },
+              data: {
+                staffId: member.id,
+              },
+            });
+          }
+
+          return member;
+        },
+      );
+
+      response.status(201).json({
+        success: true,
+        data: {
+          staff: staffMember,
+        },
+        message: "Staff account created successfully.",
+      });
+    } catch (error) {
+      sendStaffError(response, error);
+    }
+  },
+);
+
+staffRouter.patch(
+  "/staff-members/:staffId",
+  requireAuth(["ADMIN"]),
+  async (request: Request, response: Response) => {
+    try {
+      const rawStaffId = request.params.staffId;
+      const staffId = Array.isArray(rawStaffId)
+        ? rawStaffId[0]
+        : rawStaffId;
+      const body = (request.body ?? {}) as RequestBody;
+
+      if (!staffId || typeof body.isActive !== "boolean") {
+        response.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_STAFF_UPDATE",
+            message: "A valid staff account state is required.",
+          },
+        });
+        return;
+      }
+
+      const staffMember = await prisma.user.findUnique({
+        where: { id: staffId },
+        select: { id: true, role: true },
+      });
+
+      if (!staffMember || staffMember.role !== "STAFF") {
+        response.status(404).json({
+          success: false,
+          error: {
+            code: "STAFF_NOT_FOUND",
+            message: "The selected staff account was not found.",
+          },
+        });
+        return;
+      }
+
+      await prisma.user.update({
+        where: { id: staffId },
+        data: { isActive: body.isActive },
+      });
+
+      response.status(200).json({
+        success: true,
+        message: body.isActive
+          ? "Staff account enabled."
+          : "Staff account disabled.",
+      });
+    } catch (error) {
+      sendStaffError(response, error);
+    }
+  },
+);
+
+staffRouter.patch(
+  "/counters/:counterId/assignment",
+  requireAuth(["ADMIN"]),
+  async (request: Request, response: Response) => {
+    try {
+      const rawCounterId = request.params.counterId;
+      const counterId = Array.isArray(rawCounterId)
+        ? rawCounterId[0]
+        : rawCounterId;
+      const body = (request.body ?? {}) as RequestBody;
+      const staffId =
+        body.staffId === null
+          ? null
+          : readRequiredString(body.staffId);
+
+      if (!counterId || (body.staffId !== null && !staffId)) {
+        response.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_COUNTER_ASSIGNMENT",
+            message:
+              "A valid counter and staff assignment are required.",
+          },
+        });
+        return;
+      }
+
+      const counter = await prisma.counter.findUnique({
+        where: { id: counterId },
+        select: { id: true },
+      });
+
+      if (!counter) {
+        response.status(404).json({
+          success: false,
+          error: {
+            code: "COUNTER_NOT_FOUND",
+            message: "The selected counter was not found.",
+          },
+        });
+        return;
+      }
+
+      if (staffId) {
+        const staffMember = await prisma.user.findFirst({
+          where: {
+            id: staffId,
+            role: "STAFF",
+            isActive: true,
+          },
+          select: { id: true },
+        });
+
+        if (!staffMember) {
+          response.status(409).json({
+            success: false,
+            error: {
+              code: "STAFF_UNAVAILABLE",
+              message:
+                "Choose an active staff account for this counter.",
+            },
+          });
+          return;
+        }
+      }
+
+      await prisma.counter.update({
+        where: { id: counterId },
+        data: {
+          staffId: staffId || null,
+        },
+      });
+
+      response.status(200).json({
+        success: true,
+        message: staffId
+          ? "Counter assignment updated."
+          : "Counter is now unassigned.",
+      });
     } catch (error) {
       sendStaffError(response, error);
     }

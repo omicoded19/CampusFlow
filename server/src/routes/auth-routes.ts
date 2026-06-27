@@ -320,6 +320,7 @@ authRouter.post(
           email: true,
           studentId: true,
           role: true,
+          isActive: true,
           passwordHash: true,
           createdAt: true,
         },
@@ -351,6 +352,19 @@ authRouter.post(
             code: "INVALID_CREDENTIALS",
             message:
               "The email or password is incorrect.",
+          },
+        });
+
+        return;
+      }
+
+      if (!user.isActive) {
+        response.status(403).json({
+          success: false,
+          error: {
+            code: "ACCOUNT_DISABLED",
+            message:
+              "This account has been disabled by an administrator.",
           },
         });
 
@@ -459,19 +473,23 @@ authRouter.get(
           email: true,
           studentId: true,
           role: true,
+          isActive: true,
           createdAt: true,
         },
       });
 
-      if (!user) {
+      if (!user || !user.isActive) {
         clearAuthCookie(response);
 
         response.status(401).json({
           success: false,
           error: {
-            code: "USER_NOT_FOUND",
-            message:
-              "The user associated with this session no longer exists.",
+            code: user
+              ? "ACCOUNT_DISABLED"
+              : "USER_NOT_FOUND",
+            message: user
+              ? "This account has been disabled by an administrator."
+              : "The user associated with this session no longer exists.",
           },
         });
 

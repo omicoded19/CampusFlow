@@ -261,7 +261,6 @@ async function seedDatabase() {
         description: seedItem.service.description,
         iconKey: seedItem.service.iconKey,
         tokenPrefix: seedItem.service.tokenPrefix,
-        isOpen: seedItem.service.isOpen,
         averageServiceMinutes:
           seedItem.service.averageServiceMinutes,
         departmentId: department.id,
@@ -306,9 +305,7 @@ async function seedDatabase() {
             label: counter.label,
           },
         },
-        update: {
-          isActive: counter.isActive,
-        },
+        update: {},
         create: {
           serviceId: service.id,
           label: counter.label,
@@ -348,12 +345,14 @@ async function seedDatabase() {
         passwordHash,
         role: "STAFF",
         studentId: null,
+        isActive: true,
       },
       create: {
         fullName: "Campus Service Staff",
         email: demoStaffEmail,
         passwordHash,
         role: "STAFF",
+        isActive: true,
       },
     });
 
@@ -361,6 +360,7 @@ async function seedDatabase() {
       await prisma.counter.findFirst({
         where: {
           isActive: true,
+          staffId: null,
         },
         orderBy: {
           createdAt: "asc",
@@ -388,6 +388,91 @@ async function seedDatabase() {
     console.log(
       "Skipped demo staff account (set DEMO_STAFF_EMAIL and DEMO_STAFF_PASSWORD to create one).",
     );
+  }
+
+  if (demoStaffPassword) {
+    const teamPasswordHash = await bcrypt.hash(
+      demoStaffPassword,
+      12,
+    );
+
+    const demoTeam = [
+      {
+        fullName: "Health Centre Staff",
+        email: "health.staff@campusflow.local",
+        serviceSlug: "general-consultation",
+      },
+      {
+        fullName: "Accounts Office Staff",
+        email: "accounts.staff@campusflow.local",
+        serviceSlug: "fee-enquiries",
+      },
+      {
+        fullName: "Library Desk Staff",
+        email: "library.staff@campusflow.local",
+        serviceSlug: "library-clearance",
+      },
+      {
+        fullName: "Hostel Office Staff",
+        email: "hostel.staff@campusflow.local",
+        serviceSlug: "hostel-services",
+      },
+      {
+        fullName: "Student Affairs Staff",
+        email: "affairs.staff@campusflow.local",
+        serviceSlug: "id-card-support",
+      },
+    ];
+
+    for (const teamMember of demoTeam) {
+      const member = await prisma.user.upsert({
+        where: {
+          email: teamMember.email,
+        },
+        update: {
+          fullName: teamMember.fullName,
+          passwordHash: teamPasswordHash,
+          role: "STAFF",
+          studentId: null,
+          isActive: true,
+        },
+        create: {
+          fullName: teamMember.fullName,
+          email: teamMember.email,
+          passwordHash: teamPasswordHash,
+          role: "STAFF",
+          isActive: true,
+        },
+      });
+
+      const availableCounter = await prisma.counter.findFirst({
+        where: {
+          service: {
+            slug: teamMember.serviceSlug,
+          },
+          staffId: null,
+        },
+        orderBy: {
+          label: "asc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (availableCounter) {
+        await prisma.counter.update({
+          where: {
+            id: availableCounter.id,
+          },
+          data: {
+            staffId: member.id,
+          },
+        });
+      }
+
+      console.log(`Seeded demo team member: ${teamMember.email}`);
+    }
   }
 
   const demoAdminEmail =
@@ -418,12 +503,14 @@ async function seedDatabase() {
         passwordHash,
         role: "ADMIN",
         studentId: null,
+        isActive: true,
       },
       create: {
         fullName: "CampusFlow Administrator",
         email: demoAdminEmail,
         passwordHash,
         role: "ADMIN",
+        isActive: true,
       },
     });
 

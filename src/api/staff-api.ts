@@ -194,3 +194,78 @@ export async function updateCounterAvailability(counterId: string, isActive: boo
     throw new Error("Unable to update counter availability.");
   }
 }
+
+export async function createStaffMember(
+  input: import("../types/staff").CreateStaffMemberInput,
+) {
+  const response = await fetch(`${apiUrl}/api/staff/staff-members`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await readJson<
+    import("../types/staff").CreateStaffMemberResponse | StaffErrorResponse
+  >(response);
+
+  if (!response.ok || !result.success) {
+    if (!result.success) throw new Error(result.error.message);
+    throw new Error("Unable to create the staff account.");
+  }
+
+  return result.data.staff;
+}
+
+export async function updateStaffMemberStatus(
+  staffId: string,
+  isActive: boolean,
+) {
+  const response = await fetch(
+    `${apiUrl}/api/staff/staff-members/${encodeURIComponent(staffId)}`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ isActive }),
+    },
+  );
+
+  const result = await readJson<StaffMessageResponse | StaffErrorResponse>(response);
+
+  if (!response.ok || !result.success) {
+    if (!result.success) throw new Error(result.error.message);
+    throw new Error("Unable to update the staff account.");
+  }
+}
+
+export async function assignCounterStaff(
+  counterId: string,
+  staffId: string | null,
+) {
+  const response = await fetch(
+    `${apiUrl}/api/staff/counters/${encodeURIComponent(counterId)}/assignment`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ staffId }),
+    },
+  );
+
+  const result = await readJson<StaffMessageResponse | StaffErrorResponse>(response);
+
+  if (!response.ok || !result.success) {
+    if (!result.success) throw new Error(result.error.message);
+    throw new Error("Unable to update the counter assignment.");
+  }
+}

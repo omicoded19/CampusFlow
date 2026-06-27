@@ -102,6 +102,7 @@ export type AdminCounter = {
     id: string;
     fullName: string;
     email: string;
+    isActive: boolean;
   } | null;
 };
 
@@ -120,13 +121,43 @@ export type AdminDepartment = {
   activeQueueCount: number;
 };
 
+export type AdminStaffCounter = {
+  id: string;
+  label: string;
+  isActive: boolean;
+  service: {
+    id: string;
+    title: string;
+  };
+};
+
 export type AdminStaffUser = {
   id: string;
   fullName: string;
   email: string;
   role: "STAFF" | "ADMIN";
-  assignedCounters: number;
+  isActive: boolean;
+  assignedCounters: AdminStaffCounter[];
   createdAt: string;
+};
+
+export type CreateStaffMemberInput = {
+  fullName: string;
+  email: string;
+  password: string;
+  counterIds: string[];
+};
+
+export type CreateStaffMemberResponse = {
+  success: true;
+  data: {
+    staff: {
+      id: string;
+      fullName: string;
+      email: string;
+    };
+  };
+  message: string;
 };
 
 export type AdminData = {

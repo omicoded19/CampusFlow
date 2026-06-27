@@ -1,18 +1,26 @@
 import {
   Building2,
   CircleUserRound,
+  KeyRound,
+  Mail,
   ScrollText,
   Settings,
   SlidersHorizontal,
+  UserCheck,
+  UserPlus,
+  UserX,
   UsersRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
+  assignCounterStaff,
+  createStaffMember,
   getAdminData,
   getStaffAnalytics,
   updateCounterAvailability,
   updateServiceAvailability,
+  updateStaffMemberStatus,
 } from "../../api/staff-api";
 import { DonutChart, LineChart, PeakHoursChart } from "../../components/admin/AdminCharts";
 import OperationsPageShell from "../../components/staff/OperationsPageShell";
@@ -61,6 +69,13 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const [requestNumber, setRequestNumber] = useState(0);
   const [updatingId, setUpdatingId] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [staffForm, setStaffForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    counterIds: [] as string[],
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,6 +129,94 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
     }
   }
 
+  async function updateCounterAssignment(
+    counterId: string,
+    staffId: string | null,
+  ) {
+    try {
+      setUpdatingId(counterId);
+      setErrorMessage("");
+      setSuccessMessage("");
+      await assignCounterStaff(counterId, staffId);
+      setSuccessMessage(
+        staffId
+          ? "Counter assigned successfully."
+          : "Counter is now unassigned.",
+      );
+      setRequestNumber((value) => value + 1);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the counter assignment.",
+      );
+    } finally {
+      setUpdatingId("");
+    }
+  }
+
+  async function submitStaffMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setUpdatingId("create-staff");
+      setErrorMessage("");
+      setSuccessMessage("");
+      await createStaffMember(staffForm);
+      setStaffForm({
+        fullName: "",
+        email: "",
+        password: "",
+        counterIds: [],
+      });
+      setSuccessMessage("Staff account created and ready to use.");
+      setRequestNumber((value) => value + 1);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to create the staff account.",
+      );
+    } finally {
+      setUpdatingId("");
+    }
+  }
+
+  async function toggleStaffMember(staffId: string, isActive: boolean) {
+    try {
+      setUpdatingId(staffId);
+      setErrorMessage("");
+      setSuccessMessage("");
+      await updateStaffMemberStatus(staffId, isActive);
+      setSuccessMessage(
+        isActive
+          ? "Staff account enabled."
+          : "Staff account disabled.",
+      );
+      setRequestNumber((value) => value + 1);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the staff account.",
+      );
+    } finally {
+      setUpdatingId("");
+    }
+  }
+
+  const activeStaff = (adminData?.staff ?? []).filter(
+    (member) => member.role === "STAFF" && member.isActive,
+  );
+
+  const allCounters = (adminData?.services ?? []).flatMap((service) =>
+    service.counters.map((counter) => ({
+      ...counter,
+      serviceId: service.id,
+      serviceTitle: service.title,
+    })),
+  );
+
   const meta = sectionMeta[section];
 
   return (
@@ -127,6 +230,7 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
       isRefreshing={isLoading}
     >
       {errorMessage && <p className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{errorMessage}</p>}
+      {successMessage && <p className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{successMessage}</p>}
 
       {section === "departments" && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -148,11 +252,21 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {(adminData?.services ?? []).map((service, index) => {
             const colors = ["border-violet-200 bg-violet-50", "border-emerald-200 bg-emerald-50", "border-amber-200 bg-amber-50", "border-blue-200 bg-blue-50", "border-rose-200 bg-rose-50", "border-cyan-200 bg-cyan-50"];
+            const statusLabel = !service.isOpen
+              ? "CLOSED"
+              : service.activeCounters > 0
+                ? "OPEN"
+                : "NEEDS STAFF";
+            const statusClass = !service.isOpen
+              ? "bg-slate-200 text-slate-500"
+              : service.activeCounters > 0
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-amber-100 text-amber-800";
             return (
               <article key={service.id} className={`rounded-2xl border p-5 shadow-sm ${colors[index % colors.length]}`}>
-                <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold text-slate-500">{service.department}</p><h2 className="mt-1 text-lg font-extrabold text-slate-950">{service.title}</h2></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${service.isOpen ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>{service.isOpen ? "OPEN" : "CLOSED"}</span></div>
+                <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold text-slate-500">{service.department}</p><h2 className="mt-1 text-lg font-extrabold text-slate-950">{service.title}</h2></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${statusClass}`}>{statusLabel}</span></div>
                 <p className="mt-3 min-h-10 text-sm text-slate-600">{service.description}</p>
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeQueueCount}</strong><p className="text-[10px] text-slate-500">Queue</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeCounters}</strong><p className="text-[10px] text-slate-500">Counters</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.averageServiceMinutes}m</strong><p className="text-[10px] text-slate-500">Avg.</p></div></div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeQueueCount}</strong><p className="text-[10px] text-slate-500">Queue</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeCounters}</strong><p className="text-[10px] text-slate-500">Operational</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.averageServiceMinutes}m</strong><p className="text-[10px] text-slate-500">Avg.</p></div></div>
                 <button type="button" disabled={updatingId === service.id} onClick={() => void toggleService(service.id, !service.isOpen)} className={`mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-bold ${service.isOpen ? "border border-red-200 bg-white text-red-600 hover:bg-red-50" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>{service.isOpen ? "Close Service" : "Open Service"}</button>
               </article>
             );
@@ -163,23 +277,332 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
       {section === "counters" && (
         <div className="space-y-5">
           {(adminData?.services ?? []).map((service) => (
-            <article key={service.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">{service.department}</p><h2 className="mt-1 text-lg font-extrabold text-slate-950">{service.title}</h2></div><span className="text-sm font-semibold text-slate-500">{service.counters.filter((counter) => counter.isActive).length}/{service.counters.length} active</span></div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{service.counters.map((counter) => <div key={counter.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4"><div><p className="font-bold text-slate-950">{counter.label}</p><p className="mt-1 text-xs text-slate-500">{counter.staff?.fullName ?? "Unassigned"}</p></div><button type="button" disabled={updatingId === counter.id} onClick={() => void toggleCounter(counter.id, !counter.isActive)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${counter.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>{counter.isActive ? "Active" : "Inactive"}</button></div>)}</div>
+            <article
+              key={service.id}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-violet-600">
+                    {service.department}
+                  </p>
+                  <h2 className="mt-1 text-lg font-extrabold text-slate-950">
+                    {service.title}
+                  </h2>
+                </div>
+                <span className="text-sm font-semibold text-slate-500">
+                  {service.activeCounters}/{service.counters.length} operational
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {service.counters.map((counter) => {
+                  const isOperational =
+                    counter.isActive && Boolean(counter.staff?.isActive);
+                  const stateLabel = !counter.isActive
+                    ? "Inactive"
+                    : isOperational
+                      ? "Operational"
+                      : "Needs staff";
+                  const stateClass = !counter.isActive
+                    ? "bg-slate-200 text-slate-500"
+                    : isOperational
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-800";
+
+                  return (
+                    <div
+                      key={counter.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-slate-950">
+                            {counter.label}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {counter.staff?.fullName ?? "No staff assigned"}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${stateClass}`}
+                        >
+                          {stateLabel}
+                        </span>
+                      </div>
+
+                      <label className="mt-4 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                        Assigned staff
+                      </label>
+                      <select
+                        value={counter.staff?.id ?? ""}
+                        disabled={updatingId === counter.id}
+                        onChange={(event) =>
+                          void updateCounterAssignment(
+                            counter.id,
+                            event.target.value || null,
+                          )
+                        }
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                      >
+                        <option value="">Unassigned</option>
+                        {counter.staff && !counter.staff.isActive && (
+                          <option value={counter.staff.id} disabled>
+                            {counter.staff.fullName} (disabled)
+                          </option>
+                        )}
+                        {activeStaff.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.fullName}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={updatingId === counter.id}
+                        onClick={() =>
+                          void toggleCounter(counter.id, !counter.isActive)
+                        }
+                        className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-bold transition ${
+                          counter.isActive
+                            ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                            : "bg-emerald-600 text-white hover:bg-emerald-700"
+                        }`}
+                      >
+                        {counter.isActive ? "Disable counter" : "Enable counter"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </article>
           ))}
         </div>
       )}
 
       {section === "staff" && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {(adminData?.staff ?? []).map((member) => (
-            <article key={member.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 text-violet-700"><UsersRound className="h-6 w-6" /></div>
-              <h2 className="mt-4 text-lg font-extrabold text-slate-950">{member.fullName}</h2><p className="mt-1 text-sm text-slate-500">{member.email}</p>
-              <div className="mt-5 flex items-center justify-between"><span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">{member.role}</span><span className="text-xs font-semibold text-slate-500">{member.assignedCounters} assigned counters</span></div>
-            </article>
-          ))}
+        <div className="space-y-5">
+          <form
+            onSubmit={submitStaffMember}
+            className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-5 shadow-sm"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-violet-700 shadow-sm">
+                <UserPlus className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-950">
+                  Add staff member
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Create a staff login and optionally assign counters immediately.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <label className="text-sm font-semibold text-slate-700">
+                Full name
+                <input
+                  required
+                  value={staffForm.fullName}
+                  onChange={(event) =>
+                    setStaffForm((value) => ({
+                      ...value,
+                      fullName: event.target.value,
+                    }))
+                  }
+                  placeholder="Rahul Kumar"
+                  className="mt-1.5 w-full rounded-xl border border-white bg-white px-3 py-2.5 font-normal outline-none focus:border-violet-400"
+                />
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Staff email
+                <div className="relative mt-1.5">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    required
+                    type="email"
+                    value={staffForm.email}
+                    onChange={(event) =>
+                      setStaffForm((value) => ({
+                        ...value,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="staff@campusflow.local"
+                    className="w-full rounded-xl border border-white bg-white py-2.5 pl-9 pr-3 font-normal outline-none focus:border-violet-400"
+                  />
+                </div>
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Temporary password
+                <div className="relative mt-1.5">
+                  <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    required
+                    type="password"
+                    minLength={8}
+                    value={staffForm.password}
+                    onChange={(event) =>
+                      setStaffForm((value) => ({
+                        ...value,
+                        password: event.target.value,
+                      }))
+                    }
+                    placeholder="Minimum 8 characters"
+                    className="w-full rounded-xl border border-white bg-white py-2.5 pl-9 pr-3 font-normal outline-none focus:border-violet-400"
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-5">
+              <p className="text-sm font-bold text-slate-700">
+                Initial counter assignments
+              </p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {allCounters.map((counter) => (
+                  <label
+                    key={counter.id}
+                    className="flex cursor-pointer items-start gap-3 rounded-xl bg-white/80 p-3 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={staffForm.counterIds.includes(counter.id)}
+                      onChange={(event) =>
+                        setStaffForm((value) => ({
+                          ...value,
+                          counterIds: event.target.checked
+                            ? [...value.counterIds, counter.id]
+                            : value.counterIds.filter(
+                                (counterId) => counterId !== counter.id,
+                              ),
+                        }))
+                      }
+                      className="mt-0.5 h-4 w-4 accent-violet-600"
+                    />
+                    <span>
+                      <strong className="block text-slate-900">
+                        {counter.label}
+                      </strong>
+                      <span className="text-xs text-slate-500">
+                        {counter.serviceTitle}
+                        {counter.staff
+                          ? ` · currently ${counter.staff.fullName}`
+                          : " · unassigned"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={updatingId === "create-staff"}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-60"
+            >
+              <UserPlus className="h-4 w-4" />
+              {updatingId === "create-staff"
+                ? "Creating account..."
+                : "Create staff account"}
+            </button>
+          </form>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {(adminData?.staff ?? []).map((member) => (
+              <article
+                key={member.id}
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                      member.isActive
+                        ? "bg-violet-100 text-violet-700"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    <UsersRound className="h-6 w-6" />
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${
+                      member.isActive
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {member.isActive ? "ACTIVE" : "DISABLED"}
+                  </span>
+                </div>
+
+                <h2 className="mt-4 text-lg font-extrabold text-slate-950">
+                  {member.fullName}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">{member.email}</p>
+
+                <div className="mt-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                    Counter assignments
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {member.assignedCounters.map((counter) => (
+                      <span
+                        key={counter.id}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          counter.isActive
+                            ? "bg-violet-50 text-violet-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {counter.service.title} · {counter.label}
+                      </span>
+                    ))}
+                    {member.assignedCounters.length === 0 && (
+                      <span className="text-xs text-amber-700">
+                        No counters assigned
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+                    {member.role}
+                  </span>
+                  {member.role === "STAFF" ? (
+                    <button
+                      type="button"
+                      disabled={updatingId === member.id}
+                      onClick={() =>
+                        void toggleStaffMember(member.id, !member.isActive)
+                      }
+                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold ${
+                        member.isActive
+                          ? "border border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      {member.isActive ? (
+                        <UserX className="h-4 w-4" />
+                      ) : (
+                        <UserCheck className="h-4 w-4" />
+                      )}
+                      {member.isActive ? "Disable" : "Enable"}
+                    </button>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-400">
+                      Protected admin
+                    </span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       )}
 

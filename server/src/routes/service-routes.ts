@@ -41,6 +41,7 @@ const serviceSelect = {
   counters: {
     select: {
       isActive: true,
+      staff: true,
     },
   },
 
@@ -62,9 +63,25 @@ type ServiceWithQueueData = Prisma.ServiceGetPayload<{
   select: typeof serviceSelect;
 }>;
 
+function isOperationalCounter(counter: {
+  isActive: boolean;
+  staff: unknown;
+}) {
+  const staff = counter.staff as {
+    isActive?: boolean;
+    role?: string;
+  } | null;
+
+  return Boolean(
+    counter.isActive &&
+      staff?.isActive &&
+      staff.role === "STAFF",
+  );
+}
+
 function formatService(service: ServiceWithQueueData) {
   const activeCounters = service.counters.filter(
-    (counter) => counter.isActive,
+    isOperationalCounter,
   ).length;
 
   const peopleWaiting = service.queueEntries.length;
