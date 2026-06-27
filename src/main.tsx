@@ -244,7 +244,6 @@ createRoot(rootElement).render(
           ["departments", "departments"],
           ["services", "services"],
           ["counters", "counters"],
-          ["staff", "staff"],
           ["analytics", "analytics"],
           ["logs", "logs"],
           ["settings", "settings"],

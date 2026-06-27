@@ -5,12 +5,13 @@ CampusFlow is a full-stack campus queue-management platform. Students can create
 ## Core features
 
 - Student registration and login with secure HTTP-only cookie sessions
-- Role-based student and staff routes
+- Role-based student, staff, and admin routes
 - Live service availability, active-counter counts, queue length, and estimated waiting time
 - Persistent queue tokens stored in PostgreSQL
 - One-active-queue-per-student enforcement
 - Student dashboard, service directory, queue details, history, notifications, profile, and settings
-- Staff operations dashboard with controlled queue-status transitions
+- Shared staff console that operates every campus service queue without counter assignments
+- Admin dashboards for services, counters, analytics, and system logs
 - Responsive React interface with loading, empty, and error states
 
 ## Tech stack
@@ -49,7 +50,7 @@ npx prisma generate
 npm run db:seed
 ```
 
-The optional `DEMO_STAFF_EMAIL` and `DEMO_STAFF_PASSWORD` values create a local staff login during seeding.
+The `DEMO_STAFF_EMAIL` and `DEMO_STAFF_PASSWORD` values create one shared staff login during seeding. That account can view and operate every service queue; individual staff-to-counter assignments are intentionally not required.
 
 ### 4. Run CampusFlow
 

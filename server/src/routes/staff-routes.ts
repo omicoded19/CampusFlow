@@ -46,27 +46,10 @@ function isStaffActionStatus(
 }
 
 
-async function getAccessibleServiceIds(
-  request: Request,
-): Promise<string[] | null> {
-  const { userId, role } =
-    (request as AuthenticatedRequest).auth;
-
-  if (role === "ADMIN") {
-    return null;
-  }
-
-  const counters = await prisma.counter.findMany({
-    where: {
-      staffId: userId,
-      isActive: true,
-    },
-    select: {
-      serviceId: true,
-    },
-  });
-
-  return [...new Set(counters.map((counter) => counter.serviceId))];
+async function getAccessibleServiceIds(): Promise<string[] | null> {
+  // The simplified staff console is shared across the campus.
+  // Every staff user can operate every open service queue.
+  return null;
 }
 
 function readRequiredString(value: unknown) {
@@ -102,7 +85,7 @@ staffRouter.get(
       const { userId } =
         (request as AuthenticatedRequest).auth;
       const accessibleServiceIds =
-        await getAccessibleServiceIds(request);
+        await getAccessibleServiceIds();
 
       const [services, queueEntries] =
         await Promise.all([
@@ -233,10 +216,7 @@ staffRouter.get(
             department: service.department.name,
             isOpen: service.isOpen,
             activeCounters: service.counters.filter(
-              (counter) =>
-                counter.isActive &&
-                counter.staff?.isActive &&
-                counter.staff.role === "STAFF",
+              (counter) => counter.isActive,
             ).length,
             activeQueueCount:
               service._count.queueEntries,
@@ -275,7 +255,7 @@ staffRouter.get(
   async (request: Request, response: Response) => {
     try {
       const accessibleServiceIds =
-        await getAccessibleServiceIds(request);
+        await getAccessibleServiceIds();
       const now = new Date();
       const startOfToday = new Date(now);
       startOfToday.setHours(0, 0, 0, 0);
@@ -508,10 +488,7 @@ staffRouter.get(
         (sum, service) =>
           sum +
           service.counters.filter(
-            (counter) =>
-              counter.isActive &&
-              counter.staff?.isActive &&
-              counter.staff.role === "STAFF",
+            (counter) => counter.isActive,
           ).length,
         0,
       );
@@ -558,8 +535,6 @@ staffRouter.patch(
   "/queues/:queueId/status",
   async (request: Request, response: Response) => {
     try {
-      const { userId, role } =
-        (request as AuthenticatedRequest).auth;
       const rawQueueId = request.params.queueId;
       const queueId = Array.isArray(rawQueueId)
         ? rawQueueId[0]
@@ -592,7 +567,7 @@ staffRouter.patch(
             serviceId: true,
             counter: {
               select: {
-                staffId: true,
+                id: true,
               },
             },
           },
@@ -649,72 +624,15 @@ staffRouter.patch(
         return;
       }
 
-      let actionCounterId: string | null = null;
+      let actionCounterId: string | null =
+        existingEntry.counter?.id ?? null;
 
-      if (role === "STAFF") {
-        if (
-          currentStatus !== "WAITING" &&
-          existingEntry.counter?.staffId !== userId
-        ) {
-          response.status(403).json({
-            success: false,
-            error: {
-              code: "COUNTER_NOT_ASSIGNED",
-              message:
-                "This token is being handled by another staff counter.",
-            },
-          });
-
-          return;
-        }
-
-        const assignedCounter =
-          await prisma.counter.findFirst({
-            where: {
-              serviceId: existingEntry.serviceId,
-              staffId: userId,
-              isActive: true,
-              staff: {
-                is: {
-                  isActive: true,
-                  role: "STAFF",
-                },
-              },
-            },
-            orderBy: {
-              label: "asc",
-            },
-            select: {
-              id: true,
-            },
-          });
-
-        if (!assignedCounter) {
-          response.status(403).json({
-            success: false,
-            error: {
-              code: "NO_ACTIVE_COUNTER_ASSIGNMENT",
-              message:
-                "You need an active counter assignment for this service before handling its queue.",
-            },
-          });
-
-          return;
-        }
-
-        actionCounterId = assignedCounter.id;
-      } else if (status === "CALLED") {
+      if (status === "CALLED") {
         const availableCounter =
           await prisma.counter.findFirst({
             where: {
               serviceId: existingEntry.serviceId,
               isActive: true,
-              staff: {
-                is: {
-                  isActive: true,
-                  role: "STAFF",
-                },
-              },
             },
             orderBy: {
               label: "asc",
@@ -728,9 +646,9 @@ staffRouter.patch(
           response.status(409).json({
             success: false,
             error: {
-              code: "NO_OPERATIONAL_COUNTER",
+              code: "NO_ACTIVE_COUNTER",
               message:
-                "Assign an active staff member to an active counter before calling this token.",
+                "Activate at least one counter for this service before calling a token.",
             },
           });
 
@@ -797,8 +715,6 @@ staffRouter.patch(
   "/queues/:queueId/transfer",
   async (request: Request, response: Response) => {
     try {
-      const { userId, role } =
-        (request as AuthenticatedRequest).auth;
       const rawQueueId = request.params.queueId;
       const queueId = Array.isArray(rawQueueId) ? rawQueueId[0] : rawQueueId;
       const body = (request.body ?? {}) as RequestBody;
@@ -820,11 +736,6 @@ staffRouter.patch(
             status: true,
             serviceId: true,
             queueDate: true,
-            counter: {
-              select: {
-                staffId: true,
-              },
-            },
           },
         }),
         prisma.service.findUnique({
@@ -837,12 +748,6 @@ staffRouter.patch(
             counters: {
               where: {
                 isActive: true,
-                staff: {
-                  is: {
-                    isActive: true,
-                    role: "STAFF",
-                  },
-                },
               },
               select: {
                 id: true,
@@ -860,34 +765,6 @@ staffRouter.patch(
         return;
       }
 
-      if (role === "STAFF") {
-        const hasSourceAccess =
-          entry.status === "WAITING"
-            ? await prisma.counter.findFirst({
-                where: {
-                  serviceId: entry.serviceId,
-                  staffId: userId,
-                  isActive: true,
-                },
-                select: { id: true },
-              })
-            : entry.counter?.staffId === userId
-              ? { id: "assigned" }
-              : null;
-
-        if (!hasSourceAccess) {
-          response.status(403).json({
-            success: false,
-            error: {
-              code: "TRANSFER_NOT_ALLOWED",
-              message:
-                "You can only transfer tokens from your assigned service or counter.",
-            },
-          });
-          return;
-        }
-      }
-
       if (
         !destination ||
         !destination.isOpen ||
@@ -898,7 +775,7 @@ staffRouter.patch(
           error: {
             code: "DESTINATION_UNAVAILABLE",
             message:
-              "The destination service needs an active counter with an assigned staff member.",
+              "The destination service needs at least one active counter.",
           },
         });
         return;
@@ -1052,9 +929,7 @@ staffRouter.get(
             department: service.department.name,
             isOpen: service.isOpen,
             activeCounters: service.counters.filter(
-              (counter) =>
-                counter.isActive &&
-                counter.staff?.isActive,
+              (counter) => counter.isActive,
             ).length,
             activeQueueCount: service._count.queueEntries,
             averageServiceMinutes: service.averageServiceMinutes,

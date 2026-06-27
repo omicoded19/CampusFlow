@@ -98,18 +98,8 @@ function startOfTodayUtc() {
 
 function isOperationalCounter(counter: {
   isActive: boolean;
-  staff: unknown;
 }) {
-  const staff = counter.staff as {
-    isActive?: boolean;
-    role?: string;
-  } | null;
-
-  return Boolean(
-    counter.isActive &&
-      staff?.isActive &&
-      staff.role === "STAFF",
-  );
+  return counter.isActive;
 }
 
 function formatQueueEntry(entry: QueueEntryWithMetrics) {
@@ -331,12 +321,6 @@ queueRouter.post(
                 counters: {
                   where: {
                     isActive: true,
-                    staff: {
-                      is: {
-                        isActive: true,
-                        role: "STAFF",
-                      },
-                    },
                   },
                   select: {
                     id: true,

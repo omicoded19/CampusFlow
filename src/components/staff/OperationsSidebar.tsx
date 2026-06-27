@@ -40,7 +40,6 @@ const adminItems = [
   { label: "Departments", icon: Building2, href: "/admin/departments" },
   { label: "Services", icon: SlidersHorizontal, href: "/admin/services" },
   { label: "Counters", icon: Activity, href: "/admin/counters" },
-  { label: "Staff Management", icon: UsersRound, href: "/admin/staff" },
   { label: "Analytics", icon: BarChart3, href: "/admin/analytics" },
   { label: "System Logs", icon: ScrollText, href: "/admin/logs" },
   { label: "Settings", icon: Settings, href: "/admin/settings" },

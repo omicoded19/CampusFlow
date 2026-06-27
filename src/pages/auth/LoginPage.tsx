@@ -265,8 +265,7 @@ function LoginPage() {
         </p>
       ) : (
         <p className="mt-7 text-center text-sm leading-6 text-gray-500">
-          Staff accounts are created and assigned
-          by a campus administrator.
+          Use the shared staff account provided by your campus administrator.
         </p>
       )}
     </AuthLayout>

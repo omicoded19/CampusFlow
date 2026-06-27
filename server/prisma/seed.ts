@@ -144,7 +144,7 @@ const seedServices: SeedService[] = [
         "Resolve payment, scholarship, receipt, and fee-related queries.",
       iconKey: "credit-card",
       tokenPrefix: "ACC",
-      isOpen: false,
+      isOpen: true,
       averageServiceMinutes: 10,
     },
     reasons: [
@@ -157,11 +157,11 @@ const seedServices: SeedService[] = [
     counters: [
       {
         label: "Accounts Counter 1",
-        isActive: false,
+        isActive: true,
       },
       {
         label: "Accounts Counter 2",
-        isActive: false,
+        isActive: true,
       },
     ],
   },
@@ -263,6 +263,7 @@ async function seedDatabase() {
         tokenPrefix: seedItem.service.tokenPrefix,
         averageServiceMinutes:
           seedItem.service.averageServiceMinutes,
+        isOpen: seedItem.service.isOpen,
         departmentId: department.id,
       },
       create: {
@@ -305,7 +306,10 @@ async function seedDatabase() {
             label: counter.label,
           },
         },
-        update: {},
+        update: {
+          isActive: counter.isActive,
+          staffId: null,
+        },
         create: {
           serviceId: service.id,
           label: counter.label,
@@ -336,7 +340,7 @@ async function seedDatabase() {
       12,
     );
 
-    const staffUser = await prisma.user.upsert({
+    await prisma.user.upsert({
       where: {
         email: demoStaffEmail,
       },
@@ -356,31 +360,6 @@ async function seedDatabase() {
       },
     });
 
-    const firstActiveCounter =
-      await prisma.counter.findFirst({
-        where: {
-          isActive: true,
-          staffId: null,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-        select: {
-          id: true,
-        },
-      });
-
-    if (firstActiveCounter) {
-      await prisma.counter.update({
-        where: {
-          id: firstActiveCounter.id,
-        },
-        data: {
-          staffId: staffUser.id,
-        },
-      });
-    }
-
     console.log(
       `Seeded demo staff account: ${demoStaffEmail}`,
     );
@@ -390,89 +369,25 @@ async function seedDatabase() {
     );
   }
 
-  if (demoStaffPassword) {
-    const teamPasswordHash = await bcrypt.hash(
-      demoStaffPassword,
-      12,
-    );
+  // Keep the demo simple: one shared staff account operates all queues.
+  await prisma.counter.updateMany({
+    data: {
+      staffId: null,
+    },
+  });
 
-    const demoTeam = [
-      {
-        fullName: "Health Centre Staff",
-        email: "health.staff@campusflow.local",
-        serviceSlug: "general-consultation",
+  if (demoStaffEmail) {
+    await prisma.user.updateMany({
+      where: {
+        role: "STAFF",
+        email: {
+          not: demoStaffEmail,
+        },
       },
-      {
-        fullName: "Accounts Office Staff",
-        email: "accounts.staff@campusflow.local",
-        serviceSlug: "fee-enquiries",
+      data: {
+        isActive: false,
       },
-      {
-        fullName: "Library Desk Staff",
-        email: "library.staff@campusflow.local",
-        serviceSlug: "library-clearance",
-      },
-      {
-        fullName: "Hostel Office Staff",
-        email: "hostel.staff@campusflow.local",
-        serviceSlug: "hostel-services",
-      },
-      {
-        fullName: "Student Affairs Staff",
-        email: "affairs.staff@campusflow.local",
-        serviceSlug: "id-card-support",
-      },
-    ];
-
-    for (const teamMember of demoTeam) {
-      const member = await prisma.user.upsert({
-        where: {
-          email: teamMember.email,
-        },
-        update: {
-          fullName: teamMember.fullName,
-          passwordHash: teamPasswordHash,
-          role: "STAFF",
-          studentId: null,
-          isActive: true,
-        },
-        create: {
-          fullName: teamMember.fullName,
-          email: teamMember.email,
-          passwordHash: teamPasswordHash,
-          role: "STAFF",
-          isActive: true,
-        },
-      });
-
-      const availableCounter = await prisma.counter.findFirst({
-        where: {
-          service: {
-            slug: teamMember.serviceSlug,
-          },
-          staffId: null,
-        },
-        orderBy: {
-          label: "asc",
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (availableCounter) {
-        await prisma.counter.update({
-          where: {
-            id: availableCounter.id,
-          },
-          data: {
-            staffId: member.id,
-          },
-        });
-      }
-
-      console.log(`Seeded demo team member: ${teamMember.email}`);
-    }
+    });
   }
 
   const demoAdminEmail =

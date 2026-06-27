@@ -14,7 +14,6 @@ import {
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
-  assignCounterStaff,
   createStaffMember,
   getAdminData,
   getStaffAnalytics,
@@ -129,32 +128,6 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
     }
   }
 
-  async function updateCounterAssignment(
-    counterId: string,
-    staffId: string | null,
-  ) {
-    try {
-      setUpdatingId(counterId);
-      setErrorMessage("");
-      setSuccessMessage("");
-      await assignCounterStaff(counterId, staffId);
-      setSuccessMessage(
-        staffId
-          ? "Counter assigned successfully."
-          : "Counter is now unassigned.",
-      );
-      setRequestNumber((value) => value + 1);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to update the counter assignment.",
-      );
-    } finally {
-      setUpdatingId("");
-    }
-  }
-
   async function submitStaffMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -205,10 +178,6 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
     }
   }
 
-  const activeStaff = (adminData?.staff ?? []).filter(
-    (member) => member.role === "STAFF" && member.isActive,
-  );
-
   const allCounters = (adminData?.services ?? []).flatMap((service) =>
     service.counters.map((counter) => ({
       ...counter,
@@ -256,7 +225,7 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
               ? "CLOSED"
               : service.activeCounters > 0
                 ? "OPEN"
-                : "NEEDS STAFF";
+                : "NO ACTIVE COUNTERS";
             const statusClass = !service.isOpen
               ? "bg-slate-200 text-slate-500"
               : service.activeCounters > 0
@@ -266,7 +235,7 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
               <article key={service.id} className={`rounded-2xl border p-5 shadow-sm ${colors[index % colors.length]}`}>
                 <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold text-slate-500">{service.department}</p><h2 className="mt-1 text-lg font-extrabold text-slate-950">{service.title}</h2></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${statusClass}`}>{statusLabel}</span></div>
                 <p className="mt-3 min-h-10 text-sm text-slate-600">{service.description}</p>
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeQueueCount}</strong><p className="text-[10px] text-slate-500">Queue</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeCounters}</strong><p className="text-[10px] text-slate-500">Operational</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.averageServiceMinutes}m</strong><p className="text-[10px] text-slate-500">Avg.</p></div></div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeQueueCount}</strong><p className="text-[10px] text-slate-500">Queue</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.activeCounters}</strong><p className="text-[10px] text-slate-500">Active</p></div><div className="rounded-lg bg-white/75 p-3"><strong className="text-lg">{service.averageServiceMinutes}m</strong><p className="text-[10px] text-slate-500">Avg.</p></div></div>
                 <button type="button" disabled={updatingId === service.id} onClick={() => void toggleService(service.id, !service.isOpen)} className={`mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-bold ${service.isOpen ? "border border-red-200 bg-white text-red-600 hover:bg-red-50" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>{service.isOpen ? "Close Service" : "Open Service"}</button>
               </article>
             );
@@ -296,85 +265,47 @@ function AdminSectionPage({ user, section }: AdminSectionPageProps) {
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {service.counters.map((counter) => {
-                  const isOperational =
-                    counter.isActive && Boolean(counter.staff?.isActive);
-                  const stateLabel = !counter.isActive
-                    ? "Inactive"
-                    : isOperational
-                      ? "Operational"
-                      : "Needs staff";
-                  const stateClass = !counter.isActive
-                    ? "bg-slate-200 text-slate-500"
-                    : isOperational
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-800";
-
-                  return (
-                    <div
-                      key={counter.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-bold text-slate-950">
-                            {counter.label}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {counter.staff?.fullName ?? "No staff assigned"}
-                          </p>
-                        </div>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${stateClass}`}
-                        >
-                          {stateLabel}
-                        </span>
+                {service.counters.map((counter) => (
+                  <div
+                    key={counter.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-950">
+                          {counter.label}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Available to the shared staff console
+                        </p>
                       </div>
-
-                      <label className="mt-4 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                        Assigned staff
-                      </label>
-                      <select
-                        value={counter.staff?.id ?? ""}
-                        disabled={updatingId === counter.id}
-                        onChange={(event) =>
-                          void updateCounterAssignment(
-                            counter.id,
-                            event.target.value || null,
-                          )
-                        }
-                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-                      >
-                        <option value="">Unassigned</option>
-                        {counter.staff && !counter.staff.isActive && (
-                          <option value={counter.staff.id} disabled>
-                            {counter.staff.fullName} (disabled)
-                          </option>
-                        )}
-                        {activeStaff.map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.fullName}
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        disabled={updatingId === counter.id}
-                        onClick={() =>
-                          void toggleCounter(counter.id, !counter.isActive)
-                        }
-                        className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-bold transition ${
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
                           counter.isActive
-                            ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                            : "bg-emerald-600 text-white hover:bg-emerald-700"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-200 text-slate-500"
                         }`}
                       >
-                        {counter.isActive ? "Disable counter" : "Enable counter"}
-                      </button>
+                        {counter.isActive ? "Active" : "Inactive"}
+                      </span>
                     </div>
-                  );
-                })}
+
+                    <button
+                      type="button"
+                      disabled={updatingId === counter.id}
+                      onClick={() =>
+                        void toggleCounter(counter.id, !counter.isActive)
+                      }
+                      className={`mt-4 w-full rounded-lg px-3 py-2 text-xs font-bold transition ${
+                        counter.isActive
+                          ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      {counter.isActive ? "Disable counter" : "Enable counter"}
+                    </button>
+                  </div>
+                ))}
               </div>
             </article>
           ))}

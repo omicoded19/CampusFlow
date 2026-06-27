@@ -65,18 +65,8 @@ type ServiceWithQueueData = Prisma.ServiceGetPayload<{
 
 function isOperationalCounter(counter: {
   isActive: boolean;
-  staff: unknown;
 }) {
-  const staff = counter.staff as {
-    isActive?: boolean;
-    role?: string;
-  } | null;
-
-  return Boolean(
-    counter.isActive &&
-      staff?.isActive &&
-      staff.role === "STAFF",
-  );
+  return counter.isActive;
 }
 
 function formatService(service: ServiceWithQueueData) {
