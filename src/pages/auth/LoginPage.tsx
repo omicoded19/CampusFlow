@@ -103,7 +103,7 @@ function LoginPage() {
         return;
       }
 
-      navigate("/staff", {
+      navigate(user.role === "ADMIN" ? "/admin" : "/staff", {
         replace: true,
       });
     } catch (requestError) {

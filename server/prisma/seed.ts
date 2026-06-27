@@ -390,6 +390,52 @@ async function seedDatabase() {
     );
   }
 
+  const demoAdminEmail =
+    process.env.DEMO_ADMIN_EMAIL
+      ?.trim()
+      .toLowerCase();
+  const demoAdminPassword =
+    process.env.DEMO_ADMIN_PASSWORD;
+
+  if (demoAdminEmail && demoAdminPassword) {
+    if (demoAdminPassword.length < 8) {
+      throw new Error(
+        "DEMO_ADMIN_PASSWORD must contain at least 8 characters.",
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(
+      demoAdminPassword,
+      12,
+    );
+
+    await prisma.user.upsert({
+      where: {
+        email: demoAdminEmail,
+      },
+      update: {
+        fullName: "CampusFlow Administrator",
+        passwordHash,
+        role: "ADMIN",
+        studentId: null,
+      },
+      create: {
+        fullName: "CampusFlow Administrator",
+        email: demoAdminEmail,
+        passwordHash,
+        role: "ADMIN",
+      },
+    });
+
+    console.log(
+      `Seeded demo admin account: ${demoAdminEmail}`,
+    );
+  } else {
+    console.log(
+      "Skipped demo admin account (set DEMO_ADMIN_EMAIL and DEMO_ADMIN_PASSWORD to create one).",
+    );
+  }
+
   const departmentCount = await prisma.department.count();
   const serviceCount = await prisma.service.count();
   const reasonCount = await prisma.serviceReason.count();

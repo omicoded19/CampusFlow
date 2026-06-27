@@ -91,7 +91,9 @@ function ProtectedRoute({
         to={
           user.role === "STUDENT"
             ? "/dashboard"
-            : "/staff"
+            : user.role === "ADMIN"
+              ? "/admin"
+              : "/staff"
         }
         replace
       />

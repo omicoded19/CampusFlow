@@ -1,64 +1,53 @@
 import {
   CheckCircle2,
-  Clock3,
-  LogOut,
-  Play,
   RefreshCw,
-  SkipForward,
-  TicketCheck,
+  UserRound,
   UsersRound,
 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { logoutUser } from "../../api/auth-api";
 import {
+  getStaffAnalytics,
   getStaffDashboard,
   updateQueueStatus,
 } from "../../api/staff-api";
+import OperationsSidebar from "../../components/staff/OperationsSidebar";
 import type { AuthUser } from "../../types/auth";
 import type {
+  StaffAnalyticsData,
   StaffQueueAction,
   StaffQueueEntry,
   StaffServiceSummary,
 } from "../../types/staff";
 
-type StaffDashboardPageProps = {
-  user: AuthUser;
-};
+type StaffDashboardPageProps = { user: AuthUser };
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    hour: "2-digit",
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
 }
 
-function StaffDashboardPage({
-  user,
-}: StaffDashboardPageProps) {
+function statusChip(status: StaffQueueEntry["status"]) {
+  if (status === "SERVING") return "bg-emerald-100 text-emerald-700";
+  if (status === "CALLED") return "bg-blue-100 text-blue-700";
+  return "bg-violet-100 text-violet-700";
+}
+
+function StaffDashboardPage({ user }: StaffDashboardPageProps) {
   const navigate = useNavigate();
-  const [services, setServices] = useState<
-    StaffServiceSummary[]
-  >([]);
-  const [queueEntries, setQueueEntries] =
-    useState<StaffQueueEntry[]>([]);
-  const [selectedService, setSelectedService] =
-    useState("all");
-  const [isLoading, setIsLoading] =
-    useState(true);
-  const [errorMessage, setErrorMessage] =
-    useState("");
-  const [requestNumber, setRequestNumber] =
-    useState(0);
-  const [updatingQueueId, setUpdatingQueueId] =
-    useState<string | null>(null);
-  const [isLoggingOut, setIsLoggingOut] =
-    useState(false);
+  const [services, setServices] = useState<StaffServiceSummary[]>([]);
+  const [queueEntries, setQueueEntries] = useState<StaffQueueEntry[]>([]);
+  const [analytics, setAnalytics] = useState<StaffAnalyticsData | null>(null);
+  const [selectedService, setSelectedService] = useState("all");
+  const [requestNumber, setRequestNumber] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [updatingQueueId, setUpdatingQueueId] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,28 +56,18 @@ function StaffDashboardPage({
       try {
         setIsLoading(true);
         setErrorMessage("");
-        const data = await getStaffDashboard(
-          controller.signal,
-        );
-        setServices(data.services);
-        setQueueEntries(data.queueEntries);
+        const [dashboardData, analyticsData] = await Promise.all([
+          getStaffDashboard(controller.signal),
+          getStaffAnalytics(controller.signal),
+        ]);
+        setServices(dashboardData.services);
+        setQueueEntries(dashboardData.queueEntries);
+        setAnalytics(analyticsData);
       } catch (error) {
-        if (
-          error instanceof DOMException &&
-          error.name === "AbortError"
-        ) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Unable to load the staff dashboard.",
-        );
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setErrorMessage(error instanceof Error ? error.message : "Unable to load staff operations.");
       } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     }
 
@@ -100,33 +79,31 @@ function StaffDashboardPage({
     () =>
       selectedService === "all"
         ? queueEntries
-        : queueEntries.filter(
-            (entry) =>
-              entry.service.id ===
-              selectedService,
-          ),
+        : queueEntries.filter((entry) => entry.service.id === selectedService),
     [queueEntries, selectedService],
   );
 
-  async function handleStatusUpdate(
-    queueId: string,
-    status: StaffQueueAction,
-  ) {
+  const currentEntry =
+    visibleEntries.find((entry) => entry.status === "SERVING") ??
+    visibleEntries.find((entry) => entry.status === "CALLED") ??
+    visibleEntries.find((entry) => entry.status === "WAITING") ??
+    null;
+  const nextWaitingEntry = visibleEntries.find(
+    (entry) => entry.status === "WAITING" && entry.id !== currentEntry?.id,
+  );
+  const selectedServiceData =
+    services.find((service) => service.id === selectedService) ?? services[0] ?? null;
+
+  async function handleStatusUpdate(queueId: string, status: StaffQueueAction) {
     try {
       setUpdatingQueueId(queueId);
       setErrorMessage("");
       await updateQueueStatus(queueId, status);
-      setRequestNumber(
-        (currentNumber) => currentNumber + 1,
-      );
+      setRequestNumber((value) => value + 1);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to update the token.",
-      );
+      setErrorMessage(error instanceof Error ? error.message : "Unable to update token status.");
     } finally {
-      setUpdatingQueueId(null);
+      setUpdatingQueueId("");
     }
   }
 
@@ -134,323 +111,216 @@ function StaffDashboardPage({
     try {
       setIsLoggingOut(true);
       await logoutUser();
-      navigate("/login?role=staff", {
-        replace: true,
-      });
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to sign out.",
-      );
+      navigate("/login?role=staff", { replace: true });
     } finally {
       setIsLoggingOut(false);
     }
   }
 
-  const waitingCount = queueEntries.filter(
-    (entry) => entry.status === "WAITING",
-  ).length;
-  const calledCount = queueEntries.filter(
-    (entry) => entry.status === "CALLED",
-  ).length;
-  const servingCount = queueEntries.filter(
-    (entry) => entry.status === "SERVING",
-  ).length;
-
   return (
-    <div className="min-h-screen bg-[#f6f7fb]">
-      <header className="border-b border-gray-200 bg-white px-5 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-violet-600">
-              CampusFlow Staff Portal
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-gray-950">
-              Queue Operations Dashboard
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Signed in as {user.fullName}
-            </p>
-          </div>
+    <div className="flex min-h-screen bg-[#f8f9fc]">
+      <OperationsSidebar
+        user={user}
+        mode="staff"
+        isLoggingOut={isLoggingOut}
+        onLogout={handleLogout}
+      />
 
-          <button
-            type="button"
-            disabled={isLoggingOut}
-            onClick={() => {
-              void handleLogout();
-            }}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
-          >
-            <LogOut className="h-4 w-4" />
-            {isLoggingOut
-              ? "Signing out..."
-              : "Sign out"}
-          </button>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
-        {errorMessage && (
-          <p className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
-            {errorMessage}
-          </p>
-        )}
-
-        <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-2xl border border-gray-200 bg-white p-5">
-            <UsersRound className="h-6 w-6 text-violet-600" />
-            <p className="mt-4 text-sm text-gray-500">
-              Waiting
-            </p>
-            <p className="mt-1 text-3xl font-bold text-gray-950">
-              {waitingCount}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-gray-200 bg-white p-5">
-            <TicketCheck className="h-6 w-6 text-amber-600" />
-            <p className="mt-4 text-sm text-gray-500">
-              Called
-            </p>
-            <p className="mt-1 text-3xl font-bold text-gray-950">
-              {calledCount}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-gray-200 bg-white p-5">
-            <Play className="h-6 w-6 text-blue-600" />
-            <p className="mt-4 text-sm text-gray-500">
-              Serving
-            </p>
-            <p className="mt-1 text-3xl font-bold text-gray-950">
-              {servingCount}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-gray-200 bg-white p-5">
-            <Clock3 className="h-6 w-6 text-emerald-600" />
-            <p className="mt-4 text-sm text-gray-500">
-              Active services
-            </p>
-            <p className="mt-1 text-3xl font-bold text-gray-950">
-              {
-                services.filter(
-                  (service) => service.isOpen,
-                ).length
-              }
-            </p>
-          </article>
-        </section>
-
-        <section className="mt-8 rounded-3xl border border-gray-200 bg-white p-6 sm:p-8">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-950">
-                Active queue tokens
-              </h2>
-              <p className="mt-2 text-gray-600">
-                Call students, begin service, complete
-                requests, or skip unavailable tokens.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
+      <main className="min-w-0 flex-1">
+        <header className="border-b border-slate-200 bg-white px-5 py-4 sm:px-7">
+          <div className="mx-auto flex max-w-[1420px] flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
               <select
                 value={selectedService}
-                onChange={(event) =>
-                  setSelectedService(
-                    event.target.value,
-                  )
-                }
-                className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700"
+                onChange={(event) => setSelectedService(event.target.value)}
+                className="rounded-lg border-0 bg-transparent text-lg font-extrabold text-slate-950 outline-none"
               >
-                <option value="all">
-                  All services
-                </option>
+                <option value="all">All Campus Services</option>
                 {services.map((service) => (
-                  <option
-                    key={service.id}
-                    value={service.id}
-                  >
-                    {service.title} ({
-                      service.activeQueueCount
-                    })
-                  </option>
+                  <option key={service.id} value={service.id}>{service.title}</option>
                 ))}
               </select>
+              <span className="text-slate-300">•</span>
+              <strong className="text-sm text-slate-700">
+                {selectedServiceData?.activeCounters ?? 0} active counters
+              </strong>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-extrabold uppercase text-emerald-700">
+                Open
+              </span>
+            </div>
 
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() =>
-                  setRequestNumber(
-                    (currentNumber) =>
-                      currentNumber + 1,
-                  )
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${
-                    isLoading
-                      ? "animate-spin"
-                      : ""
-                  }`}
-                />
-                Refresh
-              </button>
+            <div className="flex items-center gap-3 text-right">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Staff</p>
+                <p className="text-sm font-bold text-slate-900">{user.fullName}</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-violet-200 text-xs font-extrabold text-violet-800">
+                {user.fullName.slice(0, 2).toUpperCase()}
+              </div>
             </div>
           </div>
+        </header>
 
-          {isLoading ? (
-            <div className="mt-8 space-y-4">
-              {Array.from({ length: 4 }).map(
-                (_, index) => (
-                  <div
-                    key={index}
-                    className="h-36 animate-pulse rounded-2xl bg-gray-100"
-                  />
-                ),
-              )}
-            </div>
-          ) : visibleEntries.length === 0 ? (
-            <div className="mt-8 flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-gray-50 text-center">
-              <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-              <h3 className="mt-4 text-lg font-bold text-gray-950">
-                No active tokens
-              </h3>
-              <p className="mt-2 text-sm text-gray-500">
-                New student queue entries will appear
-                here.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-8 space-y-4">
-              {visibleEntries.map((entry) => {
-                const isUpdating =
-                  updatingQueueId === entry.id;
-
-                return (
-                  <article
-                    key={entry.id}
-                    className="rounded-2xl border border-gray-200 p-5"
-                  >
-                    <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-14 w-20 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-lg font-bold text-violet-700">
-                          {entry.tokenLabel}
-                        </div>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-bold text-gray-950">
-                              {entry.student.fullName}
-                            </h3>
-                            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
-                              {entry.status}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-sm text-gray-500">
-                            {entry.student.studentId ??
-                              "No student ID"} · {" "}
-                            {entry.service.title} · {" "}
-                            joined {formatTime(entry.joinedAt)}
-                          </p>
-                          <p className="mt-2 text-sm font-medium text-gray-700">
-                            {entry.reason}
-                          </p>
-                          {entry.counterLabel && (
-                            <p className="mt-1 text-sm text-violet-700">
-                              {entry.counterLabel}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {entry.status === "WAITING" && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={isUpdating}
-                              onClick={() => {
-                                void handleStatusUpdate(
-                                  entry.id,
-                                  "CALLED",
-                                );
-                              }}
-                              className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                            >
-                              Call token
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isUpdating}
-                              onClick={() => {
-                                void handleStatusUpdate(
-                                  entry.id,
-                                  "SKIPPED",
-                                );
-                              }}
-                              className="inline-flex items-center gap-2 rounded-xl border border-orange-200 px-4 py-2.5 text-sm font-semibold text-orange-700 disabled:opacity-60"
-                            >
-                              <SkipForward className="h-4 w-4" />
-                              Skip
-                            </button>
-                          </>
-                        )}
-
-                        {entry.status === "CALLED" && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={isUpdating}
-                              onClick={() => {
-                                void handleStatusUpdate(
-                                  entry.id,
-                                  "SERVING",
-                                );
-                              }}
-                              className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                            >
-                              Start service
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isUpdating}
-                              onClick={() => {
-                                void handleStatusUpdate(
-                                  entry.id,
-                                  "SKIPPED",
-                                );
-                              }}
-                              className="rounded-xl border border-orange-200 px-4 py-2.5 text-sm font-semibold text-orange-700 disabled:opacity-60"
-                            >
-                              Skip
-                            </button>
-                          </>
-                        )}
-
-                        {entry.status === "SERVING" && (
-                          <button
-                            type="button"
-                            disabled={isUpdating}
-                            onClick={() => {
-                              void handleStatusUpdate(
-                                entry.id,
-                                "COMPLETED",
-                              );
-                            }}
-                            className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                          >
-                            Complete service
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+        <div className="mx-auto max-w-[1420px] px-5 py-6 sm:px-7">
+          {errorMessage && (
+            <p className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{errorMessage}</p>
           )}
-        </section>
+
+          <section id="current-queue" className="grid gap-5 xl:grid-cols-[0.9fr_1.25fr]">
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="font-extrabold text-slate-950">Currently Serving</h2>
+
+              {isLoading ? (
+                <div className="mt-5 h-[315px] animate-pulse rounded-xl bg-slate-100" />
+              ) : currentEntry ? (
+                <div className="mt-5 text-center">
+                  <p className="text-6xl font-black tracking-tight text-violet-600">{currentEntry.tokenLabel}</p>
+                  <p className="mt-3 font-extrabold text-slate-950">{currentEntry.student.fullName}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {currentEntry.status === "SERVING"
+                      ? `Started at ${formatTime(currentEntry.joinedAt)}`
+                      : currentEntry.status === "CALLED"
+                        ? "Token called — waiting at counter"
+                        : "Next token ready to call"}
+                  </p>
+
+                  <div className="mt-6 space-y-2.5">
+                    {currentEntry.status === "SERVING" && (
+                      <button
+                        type="button"
+                        disabled={updatingQueueId === currentEntry.id}
+                        onClick={() => void handleStatusUpdate(currentEntry.id, "COMPLETED")}
+                        className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                      >
+                        Complete Service
+                      </button>
+                    )}
+
+                    {currentEntry.status === "CALLED" && (
+                      <button
+                        type="button"
+                        disabled={updatingQueueId === currentEntry.id}
+                        onClick={() => void handleStatusUpdate(currentEntry.id, "SERVING")}
+                        className="w-full rounded-lg bg-blue-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-600 disabled:opacity-60"
+                      >
+                        Start Service
+                      </button>
+                    )}
+
+                    {currentEntry.status === "WAITING" && (
+                      <button
+                        type="button"
+                        disabled={updatingQueueId === currentEntry.id}
+                        onClick={() => void handleStatusUpdate(currentEntry.id, "CALLED")}
+                        className="w-full rounded-lg bg-blue-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-600 disabled:opacity-60"
+                      >
+                        Call Next ({currentEntry.tokenLabel})
+                      </button>
+                    )}
+
+                    {currentEntry.status !== "SERVING" && (
+                      <button
+                        type="button"
+                        disabled={updatingQueueId === currentEntry.id}
+                        onClick={() => void handleStatusUpdate(currentEntry.id, "SKIPPED")}
+                        className="w-full rounded-lg bg-amber-400 px-4 py-3 text-sm font-bold text-amber-950 transition hover:bg-amber-500 disabled:opacity-60"
+                      >
+                        Mark No-show
+                      </button>
+                    )}
+
+                    {currentEntry.status === "SERVING" && nextWaitingEntry && (
+                      <button
+                        type="button"
+                        disabled={updatingQueueId === nextWaitingEntry.id}
+                        onClick={() => void handleStatusUpdate(nextWaitingEntry.id, "CALLED")}
+                        className="w-full rounded-lg bg-blue-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-600 disabled:opacity-60"
+                      >
+                        Call Next ({nextWaitingEntry.tokenLabel})
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setRequestNumber((value) => value + 1)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Refresh Queue
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 flex min-h-[315px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                  <h3 className="mt-4 font-extrabold text-slate-950">Queue is clear</h3>
+                  <p className="mt-1 text-sm text-slate-500">Student tokens will appear here.</p>
+                  <button type="button" onClick={() => setRequestNumber((value) => value + 1)} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700">
+                    <RefreshCw className="h-4 w-4" />Refresh
+                  </button>
+                </div>
+              )}
+            </article>
+
+            <article id="all-queues" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-extrabold text-slate-950">Queue ({visibleEntries.length})</h2>
+                  <p className="mt-1 text-xs text-slate-500">Live student tokens in service order</p>
+                </div>
+                <button type="button" onClick={() => setRequestNumber((value) => value + 1)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />Refresh
+                </button>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                {visibleEntries.length === 0 ? (
+                  <div className="flex min-h-[340px] flex-col items-center justify-center bg-slate-50 text-center">
+                    <UsersRound className="h-9 w-9 text-slate-400" />
+                    <p className="mt-3 font-bold text-slate-800">No active tokens</p>
+                  </div>
+                ) : (
+                  <div className="max-h-[430px] overflow-y-auto">
+                    {visibleEntries.map((entry) => (
+                      <div key={entry.id} className="grid grid-cols-[32px_76px_1fr_auto] items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 hover:bg-slate-50">
+                        <UserRound className="h-4 w-4 text-slate-500" />
+                        <strong className="text-sm text-slate-900">{entry.tokenLabel}</strong>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">{entry.student.fullName}</p>
+                          <p className="truncate text-[11px] text-slate-500">{entry.reason}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${statusChip(entry.status)}`}>{entry.status}</span>
+                          <p className="mt-1 text-[10px] text-slate-400">{formatTime(entry.joinedAt)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </article>
+          </section>
+
+          <section id="metrics" className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+              <p className="text-xs text-slate-500">Today&apos;s Served</p>
+              <p className="mt-2 text-3xl font-black text-slate-950">{analytics?.summary.totalStudentsServed ?? 0}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+              <p className="text-xs text-slate-500">Avg. Service Time</p>
+              <p className="mt-2 text-3xl font-black text-slate-950">{analytics?.summary.averageServiceTime ?? 0} min</p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+              <p className="text-xs text-slate-500">No-show Rate</p>
+              <p className="mt-2 text-3xl font-black text-slate-950">{analytics?.summary.noShowRate ?? 0}%</p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+              <p className="text-xs text-slate-500">Counters Active</p>
+              <p className="mt-2 text-3xl font-black text-violet-700">
+                {analytics?.summary.activeCounters ?? 0}<span className="text-slate-400"> / {analytics?.summary.totalCounters ?? 0}</span>
+              </p>
+            </article>
+          </section>
+        </div>
       </main>
     </div>
   );

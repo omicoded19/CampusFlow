@@ -1,19 +1,19 @@
 import {
   Bell,
   CalendarClock,
+  CircleHelp,
   Home,
+  ListChecks,
   LogOut,
   Settings,
   UserRound,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
-import {
-  Link,
-  useLocation,
-} from "react-router";
+import { Link, useLocation } from "react-router";
 
 import type { AuthUser } from "../../types/auth";
+import CampusFlowLogo from "../brand/CampusFlowLogo";
 
 type StudentSidebarProps = {
   user: AuthUser;
@@ -25,48 +25,18 @@ type SidebarItem = {
   label: string;
   path: string;
   icon: LucideIcon;
+  exact?: boolean;
 };
 
 const sidebarItems: SidebarItem[] = [
-  {
-    label: "Dashboard",
-    path: "/dashboard",
-    icon: Home,
-  },
-  {
-    label: "Campus Services",
-    path: "/services",
-    icon: UsersRound,
-  },
-  {
-    label: "Queue History",
-    path: "/dashboard/history",
-    icon: CalendarClock,
-  },
-  {
-    label: "Notifications",
-    path: "/dashboard/notifications",
-    icon: Bell,
-  },
-  {
-    label: "Profile",
-    path: "/dashboard/profile",
-    icon: UserRound,
-  },
-  {
-    label: "Settings",
-    path: "/dashboard/settings",
-    icon: Settings,
-  },
+  { label: "Home", path: "/dashboard", icon: Home, exact: true },
+  { label: "Services", path: "/services", icon: UsersRound },
+  { label: "My Queue", path: "/dashboard/queue", icon: ListChecks },
+  { label: "History", path: "/dashboard/history", icon: CalendarClock },
+  { label: "Notifications", path: "/dashboard/notifications", icon: Bell },
+  { label: "Profile", path: "/dashboard/profile", icon: UserRound },
+  { label: "Settings", path: "/dashboard/settings", icon: Settings },
 ];
-
-function SidebarIcon({
-  icon: Icon,
-}: {
-  icon: LucideIcon;
-}) {
-  return <Icon className="h-5 w-5" />;
-}
 
 function getInitials(fullName: string) {
   return fullName
@@ -85,92 +55,64 @@ function StudentSidebar({
   const location = useLocation();
 
   return (
-    <aside className="hidden min-h-screen w-72 shrink-0 flex-col border-r border-gray-200 bg-white px-5 py-6 lg:flex">
-      <Link
-        to="/"
-        className="flex items-center gap-3 px-2"
-      >
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 font-bold text-white">
-          CF
-        </div>
-
-        <div>
-          <p className="text-lg font-bold text-gray-950">
-            CampusFlow
-          </p>
-
-          <p className="text-xs text-gray-500">
-            Smart campus queues
-          </p>
-        </div>
+    <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white px-4 py-5 lg:flex">
+      <Link to="/dashboard" className="px-2">
+        <CampusFlowLogo />
       </Link>
 
-      <nav className="mt-10 space-y-2">
+      <nav className="mt-9 space-y-1.5">
         {sidebarItems.map((item) => {
-          const isActive =
-            item.path === "/dashboard"
-              ? location.pathname === item.path
-              : location.pathname.startsWith(
-                  item.path,
-                );
+          const isActive = item.exact
+            ? location.pathname === item.path
+            : location.pathname === item.path ||
+              location.pathname.startsWith(`${item.path}/`);
+          const Icon = item.icon;
 
           return (
             <Link
               key={item.label}
               to={item.path}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
                 isActive
-                  ? "bg-violet-50 text-violet-700"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-950"
+                  ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_8px_18px_rgba(91,69,220,0.24)]"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
               }`}
             >
-              <SidebarIcon icon={item.icon} />
+              <Icon className="h-[18px] w-[18px]" />
               {item.label}
             </Link>
           );
         })}
+
+        <a
+          href="mailto:support@campusflow.local"
+          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+        >
+          <CircleHelp className="h-[18px] w-[18px]" />
+          Help & Support
+        </a>
       </nav>
 
-      <div className="mt-auto">
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700">
-              {getInitials(user.fullName)}
-            </div>
-
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-gray-950">
-                {user.fullName}
-              </p>
-
-              <p className="truncate text-xs text-gray-500">
-                {user.email}
-              </p>
-            </div>
+      <div className="mt-auto border-t border-slate-100 pt-4">
+        <div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-extrabold text-violet-700">
+            {getInitials(user.fullName)}
           </div>
-
-          <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-500">
-            Student ID:{" "}
-            <span className="font-semibold text-gray-800">
-              {user.studentId ?? "Not available"}
-            </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-950">{user.fullName}</p>
+            <p className="truncate text-[11px] text-slate-500">{user.studentId ?? user.email}</p>
           </div>
-
-          <button
-            type="button"
-            disabled={isLoggingOut}
-            onClick={() => {
-              void onLogout();
-            }}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <LogOut className="h-4 w-4" />
-
-            {isLoggingOut
-              ? "Signing out..."
-              : "Sign out"}
-          </button>
         </div>
+
+        <button
+          type="button"
+          disabled={isLoggingOut}
+          onClick={() => void onLogout()}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <LogOut className="h-[18px] w-[18px]" />
+          {isLoggingOut ? "Signing out..." : "Logout"}
+        </button>
       </div>
     </aside>
   );

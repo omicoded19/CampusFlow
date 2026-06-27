@@ -12,7 +12,11 @@ import ApiStatusPage from "./pages/ApiStatusPage";
 import ServiceDetailsPage from "./pages/ServiceDetailsPage";
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
+import AdminDashboardPage from "./pages/staff/AdminDashboardPage";
+import AdminSectionPage from "./pages/staff/AdminSectionPage";
 import StaffDashboardPage from "./pages/staff/StaffDashboardPage";
+import StaffSectionPage from "./pages/staff/StaffSectionPage";
+import MyQueuePage from "./pages/student/MyQueuePage";
 import NotificationsPage from "./pages/student/NotificationsPage";
 import ProfilePage from "./pages/student/ProfilePage";
 import QueueHistoryPage from "./pages/student/QueueHistoryPage";
@@ -94,6 +98,19 @@ createRoot(rootElement).render(
         />
 
         <Route
+          path="/dashboard/queue"
+          element={
+            <ProtectedRoute
+              allowedRoles={["STUDENT"]}
+            >
+              {(user) => (
+                <MyQueuePage user={user} />
+              )}
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/dashboard/history"
           element={
             <ProtectedRoute
@@ -145,6 +162,21 @@ createRoot(rootElement).render(
           }
         />
 
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute
+              allowedRoles={["ADMIN"]}
+              loginPath="/login?role=staff"
+            >
+              {(user) => (
+                <AdminDashboardPage user={user} />
+              )}
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/staff"
           element={
@@ -158,6 +190,77 @@ createRoot(rootElement).render(
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/staff/current"
+          element={
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]} loginPath="/login?role=staff">
+              {(user) => <StaffSectionPage user={user} section="current" />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/queues"
+          element={
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]} loginPath="/login?role=staff">
+              {(user) => <StaffSectionPage user={user} section="queues" />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/history"
+          element={
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]} loginPath="/login?role=staff">
+              {(user) => <StaffSectionPage user={user} section="history" />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/transfers"
+          element={
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]} loginPath="/login?role=staff">
+              {(user) => <StaffSectionPage user={user} section="transfers" />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/announcements"
+          element={
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]} loginPath="/login?role=staff">
+              {(user) => <StaffSectionPage user={user} section="announcements" />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/profile"
+          element={
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]} loginPath="/login?role=staff">
+              {(user) => <StaffSectionPage user={user} section="profile" />}
+            </ProtectedRoute>
+          }
+        />
+
+        {([
+          ["departments", "departments"],
+          ["services", "services"],
+          ["counters", "counters"],
+          ["staff", "staff"],
+          ["analytics", "analytics"],
+          ["logs", "logs"],
+          ["settings", "settings"],
+          ["profile", "profile"],
+        ] as const).map(([path, section]) => (
+          <Route
+            key={path}
+            path={`/admin/${path}`}
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]} loginPath="/login?role=staff">
+                {(user) => <AdminSectionPage user={user} section={section} />}
+              </ProtectedRoute>
+            }
+          />
+        ))}
+
       </Routes>
     </BrowserRouter>
   </StrictMode>,

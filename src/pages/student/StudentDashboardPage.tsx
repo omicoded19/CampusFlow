@@ -342,7 +342,7 @@ function StudentDashboardPage({
 
               <div className="mt-6 flex flex-col gap-3 border-t border-violet-200 pt-6 sm:flex-row">
                 <Link
-                  to={`/services/${activeQueue.service.id}`}
+                  to="/dashboard/queue"
                   className="inline-flex items-center justify-center rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-700"
                 >
                   View queue details
